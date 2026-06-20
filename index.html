@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地牢探险 - 单人卡牌桌游</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a14;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            overflow: hidden;
+        }
+        #game-container {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(120, 80, 255, 0.35), 0 0 80px rgba(80, 40, 200, 0.15);
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js">
+    </script>
+    <script>
+    // ═══════════════════════════════════════════════════════════════
+    //  CONSTANTS
+    // ═══════════════════════════════════════════════════════════════
+    const MAX_HP = 20;
+    const CARDS_PER_ROOM = 4;
+    const MIN_CARDS_TO_PASS = 3;
+    const DECK_MONSTERS = 18;
+    const DECK_WEAPONS = 12;
+    const DECK_POTIONS = 10;
+    const CANVAS_W = 900;
+    const CANVAS_H = 650;
+
+    const CARD_W = 170;
+    const CARD_H = 250;
+    const CARD_X = [158, 353, 548, 743];
+    const CARD_Y = 245;
+
+    const COLORS = {
+        bg:       0x12122a,
+        headerBg: 0x1a1a3e,
+        monster:  0xc0392b,
+        monsterDark: 0x7b1810,
+        monsterLight: 0xe74c3c,
+        weapon:   0x2471a3,
+        weaponDark: 0x123a54,
+        weaponLight: 0x3498db,
+        potion:   0x1e8449,
+        potionDark: 0x0f4224,
+        potionLight: 0x2ecc71,
+        hpGreen:  0x2ecc71,
+        hpYellow: 0xf39c12,
+        hpRed:    0xe74c3c,
+        gold:     0xf0c040,
+        textLight:0xe8e8f0,
+        textDim:  0x8888aa,
+        overlay:  0x000000,
+        buttonBg: 0x6c3cc0,
+        buttonHover: 0x8b5cf0,
+        cardSlot: 0x1e1e40,
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    //  GAME STATE
+    // ═══════════════════════════════════════════════════════════════
+    let gameState;
+
+    function resetGameState() {
+        return {
+            playerHP: MAX_HP,
+            maxHP: MAX_HP,
+            weapon: null,           // { atk: number, level: number | Infinity }
+            useWeapon: true,        // toggle: use weapon in combat?
+            canSkip: true,          // can skip current room? (false after a skip)
+            deck: [],               // remaining cards
+            roomCards: [],          // 4 current room cards
+            roomProcessed: [],      // boolean[4]
+            roomNumber: 1,
+            processedCount: 0,
+            gameOver: false,
+            gameWon: false,
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CARD FACTORY
+    // ═══════════════════════════════════════════════════════════════
+    function createMonster() {
+        return { type: 'monster', hp: Phaser.Math.Between(1, 14) };
+    }
+    function createWeapon() {
+        return { type: 'weapon', atk: Phaser.Math.Between(1, 10) };
+    }
+    function createPotion() {
+        return { type: 'potion', heal: Phaser.Math.Between(1, 10) };
+    }
+
+    function generateDeck() {
+        const deck = [];
+        for (let i = 0; i < DECK_MONSTERS; i++) deck.push(createMonster());
+        for (let i = 0; i < DECK_WEAPONS;  i++) deck.push(createWeapon());
+        for (let i = 0; i < DECK_POTIONS;  i++) deck.push(createPotion());
+        Phaser.Utils.Array.Shuffle(deck);
+        return deck;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  PHASER CONFIG
+    // ═══════════════════════════════════════════════════════════════
+    const config = {
+        type: Phaser.AUTO,
+        width: CANVAS_W,
+        height: CANVAS_H,
+        parent: 'game-container',
+        backgroundColor: '#12122a',
+        scene: {
+            preload: preload,
+            create: create
+        }
+    };
+
+    const game = new Phaser.Game(config);
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SCENE: PRELOAD — Generate card textures
+    // ═══════════════════════════════════════════════════════════════
+    function preload() {
+        const g = this.make.graphics({ add: false });
+
+        // --- Monster card face ---
+        drawCardFace(g, COLORS.monsterDark, COLORS.monster);
+        // Draw skull icon
+        g.fillStyle(0xffffff, 0.15);
+        g.fillCircle(CARD_W / 2, 52, 22);
+        g.fillStyle(COLORS.monsterDark, 1);
+        g.fillCircle(CARD_W / 2 - 8, 45, 5);
+        g.fillCircle(CARD_W / 2 + 8, 45, 5);
+        g.fillStyle(0xffffff, 0.3);
+        g.fillRect(CARD_W / 2 - 10, 58, 20, 4);
+        g.fillRect(CARD_W / 2 - 4, 54, 8, 10);
+        g.generateTexture('card_monster', CARD_W, CARD_H);
+
+        // --- Weapon card face ---
+        drawCardFace(g, COLORS.weaponDark, COLORS.weapon);
+        // Draw sword icon
+        g.fillStyle(0xffffff, 0.15);
+        g.fillRect(CARD_W / 2 - 3, 28, 6, 36);
+        g.fillRect(CARD_W / 2 - 16, 54, 32, 6);
+        g.fillRect(CARD_W / 2 - 2, 46, 4, 16);
+        g.fillStyle(COLORS.weaponDark, 1);
+        g.fillCircle(CARD_W / 2, 30, 5);
+        g.generateTexture('card_weapon', CARD_W, CARD_H);
+
+        // --- Potion card face ---
+        drawCardFace(g, COLORS.potionDark, COLORS.potion);
+        // Draw potion icon (flask)
+        g.fillStyle(0xffffff, 0.15);
+        g.fillRect(CARD_W / 2 - 8, 32, 16, 6);
+        g.fillRect(CARD_W / 2 - 4, 28, 8, 8);
+        g.fillRect(CARD_W / 2 - 12, 38, 24, 20);
+        g.fillStyle(COLORS.potionDark, 1);
+        g.fillRect(CARD_W / 2 - 10, 52, 20, 10);
+        g.fillStyle(0xffffff, 0.25);
+        g.fillCircle(CARD_W / 2, 44, 5);
+        g.generateTexture('card_potion', CARD_W, CARD_H);
+
+        // --- Button texture ---
+        g.clear();
+        g.fillStyle(COLORS.buttonBg, 1);
+        g.fillRoundedRect(0, 0, 200, 46, 12);
+        g.lineStyle(2, 0xa080e0, 1);
+        g.strokeRoundedRect(0, 0, 200, 46, 12);
+        g.generateTexture('btn_pass', 200, 46);
+
+        g.destroy();
+    }
+
+    function drawCardFace(g, darkColor, borderColor) {
+        g.clear();
+        // Card shadow / outer edge
+        g.fillStyle(0x000000, 0.3);
+        g.fillRoundedRect(3, 3, CARD_W, CARD_H, 14);
+        // Main background
+        g.fillStyle(darkColor, 1);
+        g.fillRoundedRect(0, 0, CARD_W, CARD_H, 14);
+        // Inner glow
+        g.fillStyle(0xffffff, 0.04);
+        g.fillRoundedRect(4, 4, CARD_W - 8, CARD_H - 8, 10);
+        // Border
+        g.lineStyle(2, borderColor, 0.8);
+        g.strokeRoundedRect(0, 0, CARD_W, CARD_H, 14);
+        // Top accent line
+        g.lineStyle(1, borderColor, 0.3);
+        g.lineBetween(20, 68, CARD_W - 20, 68);
+        // Bottom accent line
+        g.lineBetween(20, CARD_H - 52, CARD_W - 20, CARD_H - 52);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SCENE: CREATE — Build UI & initialize game
+    // ═══════════════════════════════════════════════════════════════
+    function create() {
+        const s = this; // scene reference for closures
+
+        // ── Background ──
+        // Subtle grid pattern
+        const bgGfx = s.add.graphics();
+        bgGfx.fillStyle(0x1a1a3e, 0.3);
+        for (let x = 0; x < CANVAS_W; x += 60) {
+            bgGfx.fillRect(x, 0, 1, CANVAS_H);
+        }
+        for (let y = 0; y < CANVAS_H; y += 60) {
+            bgGfx.fillRect(0, y, CANVAS_W, 1);
+        }
+
+        // ── Title (top) ──
+        s.add.text(CANVAS_W / 2, 22, '⚔️ 地牢探险', {
+            fontSize: '20px',
+            fill: '#f0c040',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        // ── Top divider line ──
+        const topLine = s.add.graphics();
+        topLine.lineStyle(1, 0x3a3a6a, 0.4);
+        topLine.lineBetween(30, 44, CANVAS_W - 30, 44);
+
+        // ── Skip Room Button (top-right) ──
+        const skipX = 830;
+        const skipY = 22;
+        const skipW = 90;
+        const skipH = 28;
+
+        const skipBg = s.add.graphics();
+        s.skipBg = skipBg;
+
+        const skipText = s.add.text(skipX, skipY, '⏭️ 跳过', {
+            fontSize: '12px',
+            fill: '#cccce0',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+        s.skipText = skipText;
+
+        const skipZone = s.add.zone(skipX, skipY, skipW, skipH)
+            .setInteractive({ useHandCursor: true });
+        skipZone.on('pointerdown', () => skipRoom(s));
+        skipZone.on('pointerover', () => {
+            if (gameState.canSkip && !gameState.gameOver && !gameState.gameWon) {
+                s.skipText.setScale(1.08);
+            }
+        });
+        skipZone.on('pointerout', () => {
+            s.skipText.setScale(1);
+        });
+        s.skipZone = skipZone;
+
+        // ═══════════════════════════════════════════════════
+        //  BOTTOM STATS BAR (all player info moved here)
+        // ═══════════════════════════════════════════════════
+        const statsY = 505;
+        const statsH = 72;
+        s.statsY = statsY; // store for toggle update function
+
+        // Stats bar background
+        const statsBg = s.add.graphics();
+        statsBg.fillStyle(COLORS.headerBg, 0.85);
+        statsBg.fillRoundedRect(15, statsY, CANVAS_W - 30, statsH, 10);
+        statsBg.lineStyle(1, 0x3a3a6a, 0.5);
+        statsBg.strokeRoundedRect(15, statsY, CANVAS_W - 30, statsH, 10);
+
+        // ── HP Display (left third) ──
+        s.add.text(90, statsY + 17, '❤️ 生命值', {
+            fontSize: '12px',
+            fill: '#cccce0',
+            fontFamily: 'Microsoft YaHei, sans-serif'
+        }).setOrigin(0.5);
+
+        const hpText = s.add.text(140, statsY + 44, '', {
+            fontSize: '15px',
+            fill: '#ffffff',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+        s.hpText = hpText;
+
+        // HP bar background
+        const hpBarBg = s.add.graphics();
+        hpBarBg.fillStyle(0x333355, 1);
+        hpBarBg.fillRoundedRect(0, 0, 200, 14, 7);
+        hpBarBg.x = 175;
+        hpBarBg.y = statsY + 36;
+
+        // HP bar fill
+        const hpBarFill = s.add.graphics();
+        hpBarFill.x = 175;
+        hpBarFill.y = statsY + 36;
+        s.hpBarFill = hpBarFill;
+
+        // ── Weapon Display (center third) ──
+        s.add.text(450, statsY + 17, '🗡️ 装备武器', {
+            fontSize: '12px',
+            fill: '#cccce0',
+            fontFamily: 'Microsoft YaHei, sans-serif'
+        }).setOrigin(0.5);
+
+        const weaponText = s.add.text(450, statsY + 42, '无', {
+            fontSize: '15px',
+            fill: '#8888aa',
+            fontFamily: 'Microsoft YaHei, sans-serif'
+        }).setOrigin(0.5);
+        s.weaponText = weaponText;
+
+        // ── Weapon Toggle Button (below weapon value) ──
+        const toggleW = 130;
+        const toggleH = 20;
+        const toggleX = 450;
+        const toggleY = statsY + 63;
+
+        const toggleBg = s.add.graphics();
+        s.weaponToggleBg = toggleBg;
+
+        const toggleText = s.add.text(toggleX, toggleY, '', {
+            fontSize: '11px',
+            fill: '#ffffff',
+            fontFamily: 'Microsoft YaHei, sans-serif'
+        }).setOrigin(0.5);
+        s.weaponToggleText = toggleText;
+
+        // Toggle hit zone
+        const toggleZone = s.add.zone(toggleX, toggleY, toggleW, toggleH)
+            .setInteractive({ useHandCursor: true });
+        toggleZone.on('pointerdown', () => {
+            if (gameState.gameOver || gameState.gameWon) return;
+            gameState.useWeapon = !gameState.useWeapon;
+            updateWeaponToggle(s);
+            if (gameState.useWeapon) {
+                showMessage(s, '⚔️ 武器已启用 — 战斗时将尝试使用武器攻击');
+            } else {
+                showMessage(s, '🔒 武器已停用 — 将徒手战斗，不消耗武器等级');
+            }
+        });
+        toggleZone.on('pointerover', () => {
+            s.tweens.add({ targets: toggleText, scaleX: 1.08, scaleY: 1.08, duration: 80, ease: 'Power2' });
+        });
+        toggleZone.on('pointerout', () => {
+            s.tweens.add({ targets: toggleText, scaleX: 1, scaleY: 1, duration: 80, ease: 'Power2' });
+        });
+        s.weaponToggleZone = toggleZone;
+
+        // ── Room / Deck Display (right third) ──
+        const roomDeckText = s.add.text(780, statsY + 22, '', {
+            fontSize: '12px',
+            fill: '#aaaacc',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            align: 'center',
+            lineSpacing: 4
+        }).setOrigin(0.5, 0);
+        s.roomDeckText = roomDeckText;
+
+        // ── Card Slots ──
+        // Arrays to hold card display objects
+        s.cardBgs = [];
+        s.cardTypeLabels = [];
+        s.cardValueTexts = [];
+        s.cardUnitLabels = [];
+        s.cardOverlays = [];
+        s.cardStatusTexts = [];
+        s.cardContainers = []; // for hover logic
+
+        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+            const cx = CARD_X[i];
+            const cy = CARD_Y;
+
+            // Empty slot indicator (shown when no card)
+            const slotGfx = s.add.graphics();
+            slotGfx.lineStyle(1, 0x3a3a6a, 0.5);
+            slotGfx.strokeRoundedRect(cx - CARD_W / 2, cy - CARD_H / 2, CARD_W, CARD_H, 14);
+            slotGfx.setVisible(false);
+            if (!s.slotGfxs) s.slotGfxs = [];
+            s.slotGfxs.push(slotGfx);
+
+            // Card background image
+            const bg = s.add.image(cx, cy, 'card_monster');
+            bg.setVisible(false);
+            bg.setInteractive({ useHandCursor: true });
+            s.cardBgs.push(bg);
+
+            // Type label (top of card)
+            const typeLabel = s.add.text(cx, cy - 85, '', {
+                fontSize: '11px',
+                fill: '#ccccee',
+                fontFamily: 'Microsoft YaHei, sans-serif',
+            }).setOrigin(0.5).setVisible(false);
+            s.cardTypeLabels.push(typeLabel);
+
+            // Value (center, large)
+            const valueText = s.add.text(cx, cy + 6, '', {
+                fontSize: '44px',
+                fill: '#ffffff',
+                fontFamily: 'Georgia, serif',
+                fontStyle: 'bold'
+            }).setOrigin(0.5).setVisible(false);
+            s.cardValueTexts.push(valueText);
+
+            // Unit label
+            const unitLabel = s.add.text(cx, cy + 50, '', {
+                fontSize: '13px',
+                fill: '#aaaacc',
+                fontFamily: 'Microsoft YaHei, sans-serif',
+            }).setOrigin(0.5).setVisible(false);
+            s.cardUnitLabels.push(unitLabel);
+
+            // Dark overlay (for processed cards)
+            const overlay = s.add.rectangle(cx, cy, CARD_W - 8, CARD_H - 8, COLORS.overlay, 0.55)
+                .setVisible(false);
+            s.cardOverlays.push(overlay);
+
+            // Status text (DEFEATED / USED / EQUIPPED)
+            const statusText = s.add.text(cx, cy + 80, '', {
+                fontSize: '14px',
+                fill: '#ff8888',
+                fontFamily: 'Microsoft YaHei, sans-serif',
+                fontStyle: 'bold'
+            }).setOrigin(0.5).setVisible(false);
+            s.cardStatusTexts.push(statusText);
+
+            // Click handler
+            bg.on('pointerdown', () => onCardClick(s, i));
+            bg.on('pointerover', () => onCardHover(s, i, true));
+            bg.on('pointerout', () => onCardHover(s, i, false));
+        }
+
+        // ── Monster Action Button (shared, hidden initially) ──
+        s.selectedCardIndex = -1;
+
+        const actionBtnW = 170;
+        const actionBtnH = 34;
+        const actionBtnBg = s.add.graphics().setVisible(false).setDepth(5);
+        s.actionBtnBg = actionBtnBg;
+
+        const actionBtnText = s.add.text(0, 0, '', {
+            fontSize: '14px',
+            fill: '#ffffff',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setVisible(false).setDepth(6);
+        s.actionBtnText = actionBtnText;
+
+        const actionBtnZone = s.add.zone(0, 0, actionBtnW, actionBtnH)
+            .setDepth(7).setInteractive({ useHandCursor: true }).setVisible(false);
+        actionBtnZone.on('pointerdown', () => {
+            if (s.selectedCardIndex >= 0) {
+                const card = gameState.roomCards[s.selectedCardIndex];
+                if (!card) return;
+                switch (card.type) {
+                    case 'monster': fightMonster(s, s.selectedCardIndex); break;
+                    case 'weapon':  equipWeapon(s, s.selectedCardIndex); break;
+                    case 'potion':  usePotion(s, s.selectedCardIndex); break;
+                }
+            }
+        });
+        actionBtnZone.on('pointerover', () => {
+            s.actionBtnText.setScale(1.06);
+        });
+        actionBtnZone.on('pointerout', () => {
+            s.actionBtnText.setScale(1);
+        });
+        s.actionBtnZone = actionBtnZone;
+
+        // ── Message Area ──
+        const msgBg = s.add.graphics();
+        msgBg.fillStyle(COLORS.headerBg, 0.6);
+        msgBg.fillRoundedRect(30, 410, CANVAS_W - 60, 74, 8);
+        msgBg.lineStyle(1, 0x3a3a6a, 0.3);
+        msgBg.strokeRoundedRect(30, 410, CANVAS_W - 60, 74, 8);
+
+        const messageText = s.add.text(CANVAS_W / 2, 447, '选择一张卡牌开始行动吧！\n打怪物、装备武器或使用血瓶', {
+            fontSize: '14px',
+            fill: '#aaaacc',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            align: 'center',
+            lineSpacing: 4
+        }).setOrigin(0.5);
+        s.messageText = messageText;
+
+        // ── Next Room Button ──
+        const btnContainer = s.add.container(CANVAS_W / 2, 600);
+        const btnBg = s.add.image(0, 0, 'btn_pass');
+        const btnText = s.add.text(0, 0, '▶  进入下一房间', {
+            fontSize: '16px',
+            fill: '#ffffff',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+        btnContainer.add([btnBg, btnText]);
+        btnContainer.setSize(200, 46);
+        btnContainer.setInteractive({ useHandCursor: true });
+        btnContainer.setVisible(false);
+        btnContainer.setAlpha(0);
+
+        btnContainer.on('pointerdown', () => passRoom(s));
+        btnContainer.on('pointerover', () => {
+            btnBg.setTint(COLORS.buttonHover);
+            btnContainer.setScale(1.04);
+        });
+        btnContainer.on('pointerout', () => {
+            btnBg.clearTint();
+            btnContainer.setScale(1);
+        });
+        s.nextRoomBtn = btnContainer;
+        s.nextRoomBtnBg = btnBg;
+
+        // ── Game Over / Victory Overlay (hidden initially) ──
+        const endOverlay = s.add.graphics();
+        endOverlay.fillStyle(0x000000, 0.75);
+        endOverlay.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        endOverlay.setVisible(false);
+        endOverlay.setDepth(100);
+        s.endOverlay = endOverlay;
+
+        const endTitle = s.add.text(CANVAS_W / 2, 200, '', {
+            fontSize: '48px',
+            fill: '#ffffff',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(101).setVisible(false);
+        s.endTitle = endTitle;
+
+        const endSubtitle = s.add.text(CANVAS_W / 2, 270, '', {
+            fontSize: '18px',
+            fill: '#cccce0',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            align: 'center'
+        }).setOrigin(0.5).setDepth(101).setVisible(false);
+        s.endSubtitle = endSubtitle;
+
+        const restartBtnBg = s.add.graphics();
+        restartBtnBg.fillStyle(COLORS.buttonBg, 1);
+        restartBtnBg.fillRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+        restartBtnBg.lineStyle(2, 0xa080e0, 1);
+        restartBtnBg.strokeRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+        restartBtnBg.setDepth(101).setVisible(false);
+        s.restartBtnBg = restartBtnBg;
+
+        const restartText = s.add.text(CANVAS_W / 2, 343, '🔄  再来一局', {
+            fontSize: '16px',
+            fill: '#ffffff',
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(101).setVisible(false);
+        s.restartText = restartText;
+
+        // Restart hit zone
+        const restartZone = s.add.zone(CANVAS_W / 2, 343, 200, 46)
+            .setDepth(102).setInteractive({ useHandCursor: true }).setVisible(false);
+        restartZone.on('pointerdown', () => restartGame(s));
+        restartZone.on('pointerover', () => {
+            restartBtnBg.clear();
+            restartBtnBg.fillStyle(COLORS.buttonHover, 1);
+            restartBtnBg.fillRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+            restartBtnBg.lineStyle(2, 0xa080e0, 1);
+            restartBtnBg.strokeRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+        });
+        restartZone.on('pointerout', () => {
+            restartBtnBg.clear();
+            restartBtnBg.fillStyle(COLORS.buttonBg, 1);
+            restartBtnBg.fillRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+            restartBtnBg.lineStyle(2, 0xa080e0, 1);
+            restartBtnBg.strokeRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+        });
+        s.restartZone = restartZone;
+
+        // ── Initialize Game ──
+        gameState = resetGameState();
+        gameState.deck = generateDeck();
+        drawRoom(s);
+        renderCards(s);
+        updateUI(s);
+
+        // Welcome animation
+        showMessage(s, '⚔️ 欢迎来到地牢！共有 ' + (DECK_MONSTERS + DECK_WEAPONS + DECK_POTIONS) + ' 张牌，' +
+            Math.floor((DECK_MONSTERS + DECK_WEAPONS + DECK_POTIONS) / CARDS_PER_ROOM) + ' 个房间\n选择卡牌开始你的冒险吧！');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CARD RENDERING
+    // ═══════════════════════════════════════════════════════════════
+    function renderCards(s) {
+        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+            const card = gameState.roomCards[i];
+            const bg = s.cardBgs[i];
+            const typeLabel = s.cardTypeLabels[i];
+            const valueText = s.cardValueTexts[i];
+            const unitLabel = s.cardUnitLabels[i];
+            const processed = gameState.roomProcessed[i];
+
+            if (!card) {
+                // No card in this slot
+                bg.setVisible(false);
+                typeLabel.setVisible(false);
+                valueText.setVisible(false);
+                unitLabel.setVisible(false);
+                s.cardOverlays[i].setVisible(false);
+                s.cardStatusTexts[i].setVisible(false);
+                if (s.slotGfxs[i]) s.slotGfxs[i].setVisible(false);
+                continue;
+            }
+
+            // Set texture
+            const texKey = card.type === 'monster' ? 'card_monster' :
+                           card.type === 'weapon' ? 'card_weapon' : 'card_potion';
+            bg.setTexture(texKey);
+            bg.setVisible(true);
+
+            // Type label
+            const typeStr = card.type === 'monster' ? '👹 怪物' :
+                            card.type === 'weapon' ? '⚔️ 武器' : '🧪 血瓶';
+            typeLabel.setText(typeStr).setVisible(true).setAlpha(1);
+
+            // Value
+            const val = card.type === 'monster' ? card.hp :
+                        card.type === 'weapon' ? card.atk : card.heal;
+            valueText.setText(String(val)).setVisible(true).setAlpha(1);
+
+            // Unit label
+            const unitStr = card.type === 'monster' ? 'HP' :
+                            card.type === 'weapon' ? 'ATK' : '恢复';
+            unitLabel.setText(unitStr).setVisible(true).setAlpha(1);
+
+            // Processed state
+            if (processed) {
+                bg.setTint(0x555555);
+                s.cardOverlays[i].setVisible(true).setAlpha(1);
+                const statusStr = card.type === 'monster' ? '☠️ 已击败' :
+                                  card.type === 'weapon' ? '✅ 已装备' : '✅ 已使用';
+                s.cardStatusTexts[i].setText(statusStr).setVisible(true).setAlpha(1);
+                bg.disableInteractive();
+            } else {
+                bg.clearTint();
+                bg.setAlpha(1);
+                s.cardOverlays[i].setVisible(false).setAlpha(1);
+                s.cardStatusTexts[i].setVisible(false).setAlpha(1);
+                if (!gameState.gameOver && !gameState.gameWon) {
+                    bg.setInteractive({ useHandCursor: true });
+                }
+            }
+
+            if (s.slotGfxs[i]) s.slotGfxs[i].setVisible(false);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  WEAPON TOGGLE DISPLAY
+    // ═══════════════════════════════════════════════════════════════
+    function updateWeaponToggle(s) {
+        const toggleBg = s.weaponToggleBg;
+        const toggleText = s.weaponToggleText;
+        const toggleZone = s.weaponToggleZone;
+        const toggleX = 450;
+        const toggleY = s.statsY + 63;
+        const toggleW = 130;
+        const toggleH = 20;
+
+        if (!gameState.weapon || gameState.gameOver || gameState.gameWon) {
+            // No weapon — hide toggle
+            toggleBg.clear();
+            toggleText.setText('').setVisible(false);
+            toggleZone.setVisible(false);
+            return;
+        }
+
+        toggleText.setVisible(true);
+        toggleZone.setVisible(true);
+
+        const isOn = gameState.useWeapon;
+        toggleBg.clear();
+
+        if (isOn) {
+            // Green — weapon enabled
+            toggleBg.fillStyle(0x1a5a2a, 0.9);
+            toggleBg.fillRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
+            toggleBg.lineStyle(1, 0x2ecc71, 0.7);
+            toggleBg.strokeRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
+            toggleText.setText('⚔️ 使用武器').setFill('#4eff8e');
+        } else {
+            // Dark gray — weapon disabled
+            toggleBg.fillStyle(0x3a3a3a, 0.8);
+            toggleBg.fillRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
+            toggleBg.lineStyle(1, 0x666666, 0.5);
+            toggleBg.strokeRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
+            toggleText.setText('🔒 不用武器').setFill('#aaaaaa');
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  UI UPDATE
+    // ═══════════════════════════════════════════════════════════════
+    function updateUI(s) {
+        // HP
+        s.hpText.setText(gameState.playerHP + ' / ' + gameState.maxHP);
+        const hpColor = gameState.playerHP > 12 ? COLORS.hpGreen :
+                        gameState.playerHP > 5  ? COLORS.hpYellow : COLORS.hpRed;
+        s.hpText.setFill('#' + hpColor.toString(16).padStart(6, '0'));
+
+        // HP bar
+        const hpRatio = Math.max(0, gameState.playerHP / gameState.maxHP);
+        const barColor = hpRatio > 0.6 ? COLORS.hpGreen :
+                         hpRatio > 0.25 ? COLORS.hpYellow : COLORS.hpRed;
+        const barW = Math.max(0, Math.floor(200 * hpRatio));
+        s.hpBarFill.clear();
+        if (barW > 0) {
+            s.hpBarFill.fillStyle(barColor, 0.9);
+            s.hpBarFill.fillRoundedRect(0, 0, barW, 14, 7);
+            // Highlight
+            s.hpBarFill.fillStyle(0xffffff, 0.15);
+            s.hpBarFill.fillRoundedRect(0, 0, barW, 7, { tl: 7, tr: 7, bl: 0, br: 0 });
+        }
+
+        // Weapon
+        if (gameState.weapon) {
+            const lvlStr = gameState.weapon.level === Infinity ? '∞' : gameState.weapon.level;
+            s.weaponText.setText('ATK:' + gameState.weapon.atk + '  LV:' + lvlStr);
+            s.weaponText.setFill('#f0c040');
+        } else {
+            s.weaponText.setText('无');
+            s.weaponText.setFill('#8888aa');
+        }
+        updateWeaponToggle(s);
+        updateSkipButton(s);
+
+        // Room / Deck
+        const roomsTotal = Math.ceil((DECK_MONSTERS + DECK_WEAPONS + DECK_POTIONS) / CARDS_PER_ROOM);
+        s.roomDeckText.setText(
+            '🏠 房间: ' + gameState.roomNumber + ' / ' + roomsTotal + '\n🃏 剩余: ' + gameState.deck.length + ' 张'
+        );
+
+        // Next Room button
+        const canPass = gameState.processedCount >= MIN_CARDS_TO_PASS ||
+            (gameState.roomCards.filter(Boolean).length < MIN_CARDS_TO_PASS &&
+             gameState.processedCount >= gameState.roomCards.filter(Boolean).length);
+
+        if (canPass && !gameState.gameOver && !gameState.gameWon) {
+            s.nextRoomBtn.setVisible(true);
+            s.tweens.add({
+                targets: s.nextRoomBtn,
+                alpha: 1,
+                duration: 300,
+                ease: 'Power2'
+            });
+        } else {
+            s.tweens.add({
+                targets: s.nextRoomBtn,
+                alpha: 0,
+                duration: 200,
+                onComplete: () => { if (!canPass || gameState.gameOver || gameState.gameWon) s.nextRoomBtn.setVisible(false); }
+            });
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CARD CLICK HANDLER
+    // ═══════════════════════════════════════════════════════════════
+    function onCardClick(s, index) {
+        if (gameState.gameOver || gameState.gameWon) return;
+        if (gameState.roomProcessed[index]) return;
+
+        const card = gameState.roomCards[index];
+        if (!card) return;
+
+        // Brief click feedback flash
+        s.tweens.add({
+            targets: s.cardBgs[index],
+            scaleX: 0.95,
+            scaleY: 0.95,
+            duration: 80,
+            yoyo: true,
+            ease: 'Power2'
+        });
+
+        switch (card.type) {
+            case 'monster':
+            case 'weapon':
+            case 'potion':
+                if (s.selectedCardIndex === index) {
+                    // Clicking the already-selected card → deselect
+                    deselectCard(s);
+                } else {
+                    // Deselect any previous selection, then select this card
+                    if (s.selectedCardIndex >= 0) deselectCard(s);
+                    selectCard(s, index);
+                }
+                break;
+        }
+    }
+
+    function onCardHover(s, index, entering) {
+        if (gameState.gameOver || gameState.gameWon) return;
+        if (gameState.roomProcessed[index]) return;
+        if (!gameState.roomCards[index]) return;
+
+        if (entering) {
+            s.tweens.add({
+                targets: s.cardBgs[index],
+                scaleX: 1.04,
+                scaleY: 1.04,
+                duration: 120,
+                ease: 'Power2'
+            });
+        } else {
+            s.tweens.add({
+                targets: s.cardBgs[index],
+                scaleX: 1,
+                scaleY: 1,
+                duration: 120,
+                ease: 'Power2'
+            });
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  MONSTER SELECTION & COMBAT PREVIEW
+    // ═══════════════════════════════════════════════════════════════
+    function getCombatPreview(monster) {
+        // Returns info about what would happen if the player fights this monster
+        const canUseWeapon = gameState.weapon && gameState.useWeapon && gameState.weapon.level >= monster.hp;
+        if (canUseWeapon) {
+            const remainingHP = monster.hp - gameState.weapon.atk;
+            if (remainingHP <= 0) {
+                return { instantKill: true, damageToPlayer: 0 };
+            } else {
+                return { instantKill: false, damageToPlayer: remainingHP };
+            }
+        }
+        return { instantKill: false, damageToPlayer: monster.hp };
+    }
+
+    function selectCard(s, index) {
+        s.selectedCardIndex = index;
+        const cx = CARD_X[index];
+        const cy = CARD_Y;
+        const card = gameState.roomCards[index];
+
+        // Move card up (absolute targets to avoid tween conflicts)
+        const offsets = [0, -85, 6, 50, 0, 80]; // bg, typeLabel, valueText, unitLabel, overlay, statusText
+        const cardObjs = [
+            s.cardBgs[index],
+            s.cardTypeLabels[index],
+            s.cardValueTexts[index],
+            s.cardUnitLabels[index],
+            s.cardOverlays[index],
+            s.cardStatusTexts[index]
+        ];
+        cardObjs.forEach((obj, i) => {
+            const restY = cy + offsets[i];
+            s.tweens.add({ targets: obj, y: restY - 35, duration: 200, ease: 'Back.easeOut' });
+        });
+
+        // Compute & show action button (type-specific)
+        const btnX = cx;
+        const btnY = cy + 120;
+        const btnW = 170;
+        const btnH = 34;
+
+        s.actionBtnBg.clear();
+        s.actionBtnBg.setPosition(btnX - btnW / 2, btnY - btnH / 2);
+
+        if (card.type === 'monster') {
+            const preview = getCombatPreview(card);
+            if (preview.instantKill) {
+                s.actionBtnBg.fillStyle(0x2a6a1a, 0.95);
+                s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnBg.lineStyle(2, 0x4ecc2e, 0.9);
+                s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnText.setText('⚡ 斩杀').setFill('#6eff4e');
+            } else {
+                s.actionBtnBg.fillStyle(0x6a2020, 0.95);
+                s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnBg.lineStyle(2, 0xcc3333, 0.9);
+                s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnText.setText('⚔️ 击杀(消耗' + preview.damageToPlayer + '点生命)').setFill('#ff6666');
+            }
+            showMessage(s, '选择战斗方式 — 点击下方按钮确认攻击');
+        } else if (card.type === 'weapon') {
+            const oldAtk = gameState.weapon ? gameState.weapon.atk : null;
+            s.actionBtnBg.fillStyle(0x123a54, 0.95);
+            s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
+            s.actionBtnBg.lineStyle(2, 0x3498db, 0.9);
+            s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
+            if (oldAtk !== null) {
+                s.actionBtnText.setText('🔄 替换(ATK ' + oldAtk + ' → ' + card.atk + ')').setFill('#6eb8f0');
+                showMessage(s, '新武器 ATK ' + card.atk + '，将替换当前武器（ATK ' + oldAtk + '）');
+            } else {
+                s.actionBtnText.setText('🗡️ 装备').setFill('#6eb8f0');
+                showMessage(s, '装备武器 ATK ' + card.atk + ' — 点击按钮确认');
+            }
+        } else if (card.type === 'potion') {
+            const actualHeal = Math.min(card.heal, gameState.maxHP - gameState.playerHP);
+            s.actionBtnBg.fillStyle(0x0f4224, 0.95);
+            s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
+            s.actionBtnBg.lineStyle(2, 0x2ecc71, 0.9);
+            s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
+            if (actualHeal <= 0) {
+                s.actionBtnText.setText('🧪 已达上限(HP已满)').setFill('#88cc88');
+                showMessage(s, '生命值已满，使用血瓶没有效果');
+            } else {
+                s.actionBtnText.setText('🧪 使用(恢复' + actualHeal + '点生命)').setFill('#6eff8e');
+                showMessage(s, '使用血瓶恢复 ' + actualHeal + ' 点生命 — 点击按钮确认');
+            }
+        }
+
+        s.actionBtnBg.setVisible(true);
+
+        // Position and show text + zone
+        s.actionBtnText.setPosition(btnX, btnY).setVisible(true);
+        s.actionBtnZone.setPosition(btnX, btnY).setVisible(true);
+    }
+
+    function deselectCard(s) {
+        if (s.selectedCardIndex < 0) return;
+        const index = s.selectedCardIndex;
+        s.selectedCardIndex = -1;
+
+        const cy = CARD_Y;
+        const offsets = [0, -85, 6, 50, 0, 80];
+        const cardObjs = [
+            s.cardBgs[index],
+            s.cardTypeLabels[index],
+            s.cardValueTexts[index],
+            s.cardUnitLabels[index],
+            s.cardOverlays[index],
+            s.cardStatusTexts[index]
+        ];
+        cardObjs.forEach((obj, i) => {
+            const restY = cy + offsets[i];
+            s.tweens.add({ targets: obj, y: restY, duration: 180, ease: 'Back.easeIn' });
+        });
+
+        // Hide action button
+        s.actionBtnBg.setVisible(false);
+        s.actionBtnText.setVisible(false);
+        s.actionBtnZone.setVisible(false);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  COMBAT
+    // ═══════════════════════════════════════════════════════════════
+    function fightMonster(s, index) {
+        const monster = gameState.roomCards[index];
+        const originalHP = monster.hp;
+        let damageToPlayer;
+        let weaponUsed = false;
+
+        // Check if weapon can be used (must be equipped, enabled, and pass level check)
+        const canUseWeapon = gameState.weapon && gameState.useWeapon && gameState.weapon.level >= monster.hp;
+
+        if (canUseWeapon) {
+            weaponUsed = true;
+            const remainingHP = monster.hp - gameState.weapon.atk;
+            if (remainingHP <= 0) {
+                // Instant kill!
+                damageToPlayer = 0;
+                showMessage(s, '⚡ 武器攻击！ATK ' + gameState.weapon.atk +
+                    ' vs 怪物 HP ' + originalHP + ' → 秒杀！\n无伤击败怪物！（武器等级降为 ' + originalHP + '）');
+            } else {
+                // Weapon reduces HP, player takes rest
+                damageToPlayer = remainingHP;
+                showMessage(s, '⚔️ 武器攻击削减 ' + gameState.weapon.atk + ' 点HP\n' +
+                    '怪物剩余 HP ' + remainingHP + '，你受到 ' + remainingHP + ' 点伤害（武器等级降为 ' + originalHP + '）');
+            }
+            // Update weapon level
+            gameState.weapon.level = originalHP;
+        } else {
+            // No weapon, weapon disabled, or level check failed
+            damageToPlayer = monster.hp;
+            if (gameState.weapon && !gameState.useWeapon) {
+                // Player has weapon but chose not to use it
+                showMessage(s, '🔒 武器已手动停用！徒手战斗\n' +
+                    '击败怪物（HP ' + monster.hp + '），受到 ' + damageToPlayer + ' 点伤害！（武器等级保持不变）');
+            } else if (gameState.weapon) {
+                // Level check failed
+                showMessage(s, '🔒 武器等级不足！（LV ' +
+                    (gameState.weapon.level === Infinity ? '∞' : gameState.weapon.level) +
+                    ' < 怪物 HP ' + monster.hp + '）\n徒手战斗，受到 ' + damageToPlayer + ' 点伤害！');
+            } else {
+                // No weapon at all
+                showMessage(s, '👊 徒手战斗！\n击败怪物（HP ' + monster.hp + '），受到 ' + damageToPlayer + ' 点伤害！');
+            }
+            weaponUsed = false;
+        }
+
+        // Apply damage
+        gameState.playerHP = Math.max(0, gameState.playerHP - damageToPlayer);
+
+        // Mark defeated
+        gameState.roomProcessed[index] = true;
+        gameState.processedCount++;
+
+        // Deselect card and hide action button
+        deselectCard(s);
+
+        // Screen shake for impact
+        if (damageToPlayer > 0) {
+            s.cameras.main.shake(200, 0.005 * damageToPlayer);
+            // Red flash
+            s.cameras.main.flash(150, 255, 0, 0);
+        } else if (weaponUsed) {
+            // Gold flash for instant kill
+            s.cameras.main.flash(150, 255, 200, 0);
+        }
+
+        renderCards(s);
+        updateUI(s);
+
+        // Check game over
+        if (gameState.playerHP <= 0) {
+            s.time.delayedCall(600, () => triggerGameOver(s));
+        } else {
+            // Auto-check if all monsters in room are defeated
+            checkAutoPass(s);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  EQUIP WEAPON
+    // ═══════════════════════════════════════════════════════════════
+    function equipWeapon(s, index) {
+        const weaponCard = gameState.roomCards[index];
+        const oldWeapon = gameState.weapon;
+
+        gameState.weapon = {
+            atk: weaponCard.atk,
+            level: Infinity // fresh weapon, infinite level
+        };
+
+        gameState.roomProcessed[index] = true;
+        gameState.processedCount++;
+
+        // Deselect and hide action button
+        deselectCard(s);
+
+        if (oldWeapon) {
+            showMessage(s, '🔄 替换武器！旧武器（ATK ' + oldWeapon.atk + '）已丢弃\n' +
+                '新武器 ATK ' + weaponCard.atk + '，等级 ∞（首次击杀后变为怪物HP值）');
+        } else {
+            showMessage(s, '🗡️ 装备武器！ATK ' + weaponCard.atk +
+                '\n等级 ∞ — 首次击杀怪物后等级将变为该怪物的HP值');
+        }
+
+        renderCards(s);
+        updateUI(s);
+        checkAutoPass(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  USE POTION
+    // ═══════════════════════════════════════════════════════════════
+    function usePotion(s, index) {
+        const potionCard = gameState.roomCards[index];
+        const healAmount = potionCard.heal;
+        const oldHP = gameState.playerHP;
+        const actualHeal = Math.min(healAmount, gameState.maxHP - gameState.playerHP);
+
+        gameState.playerHP = Math.min(gameState.maxHP, gameState.playerHP + healAmount);
+        gameState.roomProcessed[index] = true;
+        gameState.processedCount++;
+
+        // Deselect and hide action button
+        deselectCard(s);
+
+        if (actualHeal < healAmount) {
+            showMessage(s, '🧪 使用血瓶！恢复 ' + actualHeal + ' 点生命（已达上限）\n' +
+                'HP: ' + oldHP + ' → ' + gameState.playerHP);
+        } else if (actualHeal === 0) {
+            showMessage(s, '🧪 使用血瓶！但生命值已满，没有效果');
+        } else {
+            showMessage(s, '🧪 使用血瓶！恢复 ' + actualHeal + ' 点生命\n' +
+                'HP: ' + oldHP + ' → ' + gameState.playerHP);
+        }
+
+        // Green flash for healing
+        if (actualHeal > 0) {
+            s.cameras.main.flash(150, 0, 255, 100);
+        }
+
+        renderCards(s);
+        updateUI(s);
+        checkAutoPass(s);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ROOM MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════
+    function drawRoom(s) {
+        gameState.roomCards = [];
+        gameState.roomProcessed = [];
+        gameState.processedCount = 0;
+
+        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+            if (gameState.deck.length > 0) {
+                gameState.roomCards.push(gameState.deck.shift());
+                gameState.roomProcessed.push(false);
+            } else {
+                gameState.roomCards.push(null);
+                gameState.roomProcessed.push(true); // mark empty slots as "processed"
+            }
+        }
+    }
+
+    function passRoom(s) {
+        if (gameState.gameOver || gameState.gameWon) return;
+
+        // Deselect any selected card
+        deselectCard(s);
+
+        // Check if deck is empty — if so, player wins!
+        if (gameState.deck.length === 0) {
+            triggerVictory(s);
+            return;
+        }
+
+        gameState.roomNumber++;
+        gameState.canSkip = true; // re-enable skip after normal room pass
+
+        // Fade out old cards
+        const fadeTargets = [];
+        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+            fadeTargets.push(s.cardBgs[i]);
+            fadeTargets.push(s.cardTypeLabels[i]);
+            fadeTargets.push(s.cardValueTexts[i]);
+            fadeTargets.push(s.cardUnitLabels[i]);
+            fadeTargets.push(s.cardOverlays[i]);
+            fadeTargets.push(s.cardStatusTexts[i]);
+        }
+
+        s.tweens.add({
+            targets: fadeTargets,
+            alpha: 0,
+            duration: 250,
+            ease: 'Power2',
+            onComplete: () => {
+                // Draw new room
+                drawRoom(s);
+                renderCards(s);
+
+                // Fade in new cards
+                const fadeIn = [];
+                for (let i = 0; i < CARDS_PER_ROOM; i++) {
+                    if (gameState.roomCards[i]) {
+                        fadeIn.push(s.cardBgs[i]);
+                        fadeIn.push(s.cardTypeLabels[i]);
+                        fadeIn.push(s.cardValueTexts[i]);
+                        fadeIn.push(s.cardUnitLabels[i]);
+                    }
+                }
+                // Reset alpha and fade in
+                fadeIn.forEach(obj => obj.setAlpha(0));
+                s.tweens.add({
+                    targets: fadeIn,
+                    alpha: 1,
+                    duration: 300,
+                    ease: 'Power2'
+                });
+
+                updateUI(s);
+                showMessage(s, '🚪 进入房间 ' + gameState.roomNumber +
+                    ' | 剩余牌堆: ' + gameState.deck.length + ' 张');
+            }
+        });
+    }
+
+    function skipRoom(s) {
+        if (!gameState.canSkip) {
+            showMessage(s, '⛔ 不能连续跳过两个房间！需先正常通过一个房间');
+            return;
+        }
+        if (gameState.gameOver || gameState.gameWon) return;
+
+        // Deselect any selected card
+        deselectCard(s);
+
+        // Put current room cards at the bottom of the deck
+        for (let i = CARDS_PER_ROOM - 1; i >= 0; i--) {
+            if (gameState.roomCards[i]) {
+                gameState.deck.push(gameState.roomCards[i]);
+            }
+        }
+
+        // Disable skip for next room
+        gameState.canSkip = false;
+        gameState.roomNumber++;
+
+        // Fade out old cards
+        const fadeTargets = [];
+        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+            fadeTargets.push(s.cardBgs[i]);
+            fadeTargets.push(s.cardTypeLabels[i]);
+            fadeTargets.push(s.cardValueTexts[i]);
+            fadeTargets.push(s.cardUnitLabels[i]);
+            fadeTargets.push(s.cardOverlays[i]);
+            fadeTargets.push(s.cardStatusTexts[i]);
+        }
+
+        s.tweens.add({
+            targets: fadeTargets,
+            alpha: 0,
+            duration: 250,
+            ease: 'Power2',
+            onComplete: () => {
+                drawRoom(s);
+                renderCards(s);
+
+                const fadeIn = [];
+                for (let i = 0; i < CARDS_PER_ROOM; i++) {
+                    if (gameState.roomCards[i]) {
+                        fadeIn.push(s.cardBgs[i]);
+                        fadeIn.push(s.cardTypeLabels[i]);
+                        fadeIn.push(s.cardValueTexts[i]);
+                        fadeIn.push(s.cardUnitLabels[i]);
+                    }
+                }
+                fadeIn.forEach(obj => obj.setAlpha(0));
+                s.tweens.add({
+                    targets: fadeIn,
+                    alpha: 1,
+                    duration: 300,
+                    ease: 'Power2'
+                });
+
+                updateUI(s);
+                showMessage(s, '⏭️ 跳过房间 ' + (gameState.roomNumber - 1) +
+                    ' | 进入房间 ' + gameState.roomNumber +
+                    ' | 剩余牌堆: ' + gameState.deck.length + ' 张\n（原房间卡牌已放回牌堆底部）');
+            }
+        });
+    }
+
+    function updateSkipButton(s) {
+        const canUse = gameState.canSkip && !gameState.gameOver && !gameState.gameWon;
+        s.skipBg.clear();
+        if (canUse) {
+            s.skipBg.fillStyle(0x3a2a5a, 0.9);
+            s.skipBg.fillRoundedRect(830 - 45, 22 - 14, 90, 28, 7);
+            s.skipBg.lineStyle(1, 0x8b5cf0, 0.7);
+            s.skipBg.strokeRoundedRect(830 - 45, 22 - 14, 90, 28, 7);
+            s.skipText.setFill('#c0b0f0');
+            s.skipZone.setInteractive({ useHandCursor: true });
+        } else {
+            s.skipBg.fillStyle(0x2a2a3a, 0.6);
+            s.skipBg.fillRoundedRect(830 - 45, 22 - 14, 90, 28, 7);
+            s.skipBg.lineStyle(1, 0x444466, 0.3);
+            s.skipBg.strokeRoundedRect(830 - 45, 22 - 14, 90, 28, 7);
+            s.skipText.setFill('#666688');
+            s.skipZone.disableInteractive();
+        }
+    }
+
+    function checkAutoPass(s) {
+        // Check if all non-null cards are processed
+        const activeCards = gameState.roomCards.filter(c => c !== null).length;
+        if (gameState.processedCount >= MIN_CARDS_TO_PASS && activeCards >= MIN_CARDS_TO_PASS) {
+            // Notify player they can proceed
+            if (gameState.processedCount === activeCards) {
+                showMessage(s, '✅ 本房间所有卡牌已处理完毕！点击下方按钮进入下一房间');
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  MESSAGING
+    // ═══════════════════════════════════════════════════════════════
+    function showMessage(s, text) {
+        s.messageText.setText(text);
+        // Brief scale pop
+        s.tweens.add({
+            targets: s.messageText,
+            scaleX: 1.03,
+            scaleY: 1.03,
+            duration: 100,
+            yoyo: true,
+            ease: 'Power2'
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  GAME OVER / VICTORY
+    // ═══════════════════════════════════════════════════════════════
+    function triggerGameOver(s) {
+        gameState.gameOver = true;
+        renderCards(s);
+        updateUI(s);
+
+        s.time.delayedCall(400, () => {
+            s.endOverlay.setVisible(true);
+            s.endTitle.setText('💀 你死了').setVisible(true);
+            s.endSubtitle.setText(
+                '你倒在了第 ' + gameState.roomNumber + ' 个房间\n' +
+                '击败了无数怪物，但地牢还是吞噬了你...'
+            ).setVisible(true);
+            s.restartBtnBg.setVisible(true);
+            s.restartText.setVisible(true);
+            s.restartZone.setVisible(true);
+
+            // Fade in
+            s.endTitle.setAlpha(0);
+            s.endSubtitle.setAlpha(0);
+            s.tweens.add({ targets: s.endTitle, alpha: 1, duration: 600, ease: 'Power2' });
+            s.tweens.add({ targets: s.endSubtitle, alpha: 1, duration: 600, delay: 300, ease: 'Power2' });
+        });
+    }
+
+    function triggerVictory(s) {
+        gameState.gameWon = true;
+        renderCards(s);
+        updateUI(s);
+
+        s.time.delayedCall(400, () => {
+            s.endOverlay.setVisible(true);
+            s.endTitle.setText('🏆 地牢通关！').setVisible(true);
+            s.endSubtitle.setText(
+                '恭喜！你成功打通了所有 ' + gameState.roomNumber + ' 个房间\n' +
+                '剩余生命: ' + gameState.playerHP + ' / ' + gameState.maxHP
+            ).setVisible(true);
+            s.restartBtnBg.setVisible(true);
+            s.restartText.setVisible(true);
+            s.restartZone.setVisible(true);
+
+            s.endTitle.setAlpha(0);
+            s.endSubtitle.setAlpha(0);
+            s.tweens.add({ targets: s.endTitle, alpha: 1, duration: 600, ease: 'Power2' });
+            s.tweens.add({ targets: s.endSubtitle, alpha: 1, duration: 600, delay: 300, ease: 'Power2' });
+        });
+    }
+
+    function restartGame(s) {
+        // Hide overlays
+        s.endOverlay.setVisible(false);
+        s.endTitle.setVisible(false);
+        s.endSubtitle.setVisible(false);
+        s.restartBtnBg.setVisible(false);
+        s.restartText.setVisible(false);
+        s.restartZone.setVisible(false);
+
+        // Reset state
+        gameState = resetGameState();
+        gameState.deck = generateDeck();
+        drawRoom(s);
+        renderCards(s);
+        updateUI(s);
+
+        // Fade in all card elements
+        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+            if (gameState.roomCards[i]) {
+                s.cardBgs[i].setAlpha(1);
+                s.cardTypeLabels[i].setAlpha(1);
+                s.cardValueTexts[i].setAlpha(1);
+                s.cardUnitLabels[i].setAlpha(1);
+            }
+        }
+
+        showMessage(s, '🔄 新的冒险开始！共有 ' + (DECK_MONSTERS + DECK_WEAPONS + DECK_POTIONS) + ' 张牌\n选择卡牌开始战斗吧！');
+    }
+    </script>
+</body>
+</html>
