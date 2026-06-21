@@ -2,23 +2,41 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>地牢探险 - 单人卡牌桌游</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            top: 0; left: 0;
+        }
         body {
             background: #0a0a14;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
+            height: 100dvh;
+            height: 100vh;
             font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-            overflow: hidden;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
         #game-container {
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 0 40px rgba(120, 80, 255, 0.35), 0 0 80px rgba(80, 40, 200, 0.15);
+            max-width: 100vw;
+            max-height: 100dvh;
+            max-height: 100vh;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+            will-change: transform;
+        }
+        #game-container canvas {
+            display: block;
+            image-rendering: auto;
         }
     </style>
 </head>
@@ -33,16 +51,18 @@
     const MAX_HP = 20;
     const CARDS_PER_ROOM = 4;
     const MIN_CARDS_TO_PASS = 3;
-    const DECK_MONSTERS = 18;
-    const DECK_WEAPONS = 12;
+    const DECK_MONSTERS = 28;
+    const DECK_WEAPONS = 10;
     const DECK_POTIONS = 10;
-    const CANVAS_W = 900;
-    const CANVAS_H = 650;
+    const DECK_TOTAL = DECK_MONSTERS + DECK_WEAPONS + DECK_POTIONS; // 48
+    const CANVAS_W = 480;
+    const CANVAS_H = 800;
 
-    const CARD_W = 170;
-    const CARD_H = 250;
-    const CARD_X = [158, 353, 548, 743];
-    const CARD_Y = 245;
+    const CARD_W = 160;
+    const CARD_H = 210;
+    // 2×2 grid: index 0=tl, 1=tr, 2=bl, 3=br
+    const CARD_X = [133, 347, 133, 347];
+    const CARD_Y = [160, 160, 390, 390];
 
     const COLORS = {
         bg:       0x12122a,
@@ -66,6 +86,35 @@
         buttonBg: 0x6c3cc0,
         buttonHover: 0x8b5cf0,
         cardSlot: 0x1e1e40,
+    };
+
+    const THEMES = {
+        dark: {
+            bg:         0x12122a,
+            headerBg:   0x1a1a3e,
+            textLight:  0xe8e8f0,
+            textDim:    0x8888aa,
+            accent:     0xf0c040,
+            gridColor:  0x1a1a3e,
+            gridAlpha:  0.3,
+            divider:    0x3a3a6a,
+            cardMonsterBg: 0x7b1810, cardMonsterBorder: 0xc0392b,
+            cardWeaponBg:  0x123a54, cardWeaponBorder:  0x2471a3,
+            cardPotionBg:  0x0f4224, cardPotionBorder:  0x1e8449,
+        },
+        light: {
+            bg:         0xf5f0e8,
+            headerBg:   0xe8e2d5,
+            textLight:  0x333344,
+            textDim:    0x778899,
+            accent:     0xb08000,
+            gridColor:  0xd8d0c0,
+            gridAlpha:  0.4,
+            divider:    0xc8c0b0,
+            cardMonsterBg: 0xe0c8c4, cardMonsterBorder: 0xa03028,
+            cardWeaponBg:  0xc8d4e4, cardWeaponBorder:  0x1e6090,
+            cardPotionBg:  0xc4e0d0, cardPotionBorder:  0x186838,
+        }
     };
 
     // ═══════════════════════════════════════════════════════════════
@@ -93,21 +142,21 @@
     // ═══════════════════════════════════════════════════════════════
     //  CARD FACTORY
     // ═══════════════════════════════════════════════════════════════
-    function createMonster() {
-        return { type: 'monster', hp: Phaser.Math.Between(1, 14) };
-    }
-    function createWeapon() {
-        return { type: 'weapon', atk: Phaser.Math.Between(1, 10) };
-    }
-    function createPotion() {
-        return { type: 'potion', heal: Phaser.Math.Between(1, 10) };
-    }
-
     function generateDeck() {
         const deck = [];
-        for (let i = 0; i < DECK_MONSTERS; i++) deck.push(createMonster());
-        for (let i = 0; i < DECK_WEAPONS;  i++) deck.push(createWeapon());
-        for (let i = 0; i < DECK_POTIONS;  i++) deck.push(createPotion());
+        // 28 monsters: 2 each of HP 1–14
+        for (let hp = 1; hp <= 14; hp++) {
+            deck.push({ type: 'monster', hp: hp });
+            deck.push({ type: 'monster', hp: hp });
+        }
+        // 10 weapons: ATK 1–10, one each
+        for (let atk = 1; atk <= 10; atk++) {
+            deck.push({ type: 'weapon', atk: atk });
+        }
+        // 10 potions: heal 1–10, one each
+        for (let heal = 1; heal <= 10; heal++) {
+            deck.push({ type: 'potion', heal: heal });
+        }
         Phaser.Utils.Array.Shuffle(deck);
         return deck;
     }
@@ -121,6 +170,16 @@
         height: CANVAS_H,
         parent: 'game-container',
         backgroundColor: '#12122a',
+        render: {
+            antialias: true,
+            roundPixels: true,
+            powerPreference: 'high-performance'
+        },
+        scale: {
+            mode: Phaser.Scale.FIT,
+            autoCenter: Phaser.Scale.CENTER_BOTH,
+            autoRound: true
+        },
         scene: {
             preload: preload,
             create: create
@@ -135,50 +194,62 @@
     function preload() {
         const g = this.make.graphics({ add: false });
 
-        // --- Monster card face ---
-        drawCardFace(g, COLORS.monsterDark, COLORS.monster);
-        // Draw skull icon
-        g.fillStyle(0xffffff, 0.15);
-        g.fillCircle(CARD_W / 2, 52, 22);
-        g.fillStyle(COLORS.monsterDark, 1);
-        g.fillCircle(CARD_W / 2 - 8, 45, 5);
-        g.fillCircle(CARD_W / 2 + 8, 45, 5);
-        g.fillStyle(0xffffff, 0.3);
-        g.fillRect(CARD_W / 2 - 10, 58, 20, 4);
-        g.fillRect(CARD_W / 2 - 4, 54, 8, 10);
-        g.generateTexture('card_monster', CARD_W, CARD_H);
+        function drawMonsterIcon() {
+            g.fillStyle(0xffffff, 0.15);
+            g.fillCircle(CARD_W / 2, 48, 20);
+            g.fillStyle(0x000000, 0.6);
+            g.fillCircle(CARD_W / 2 - 7, 42, 4);
+            g.fillCircle(CARD_W / 2 + 7, 42, 4);
+            g.fillStyle(0xffffff, 0.25);
+            g.fillRect(CARD_W / 2 - 9, 54, 18, 3);
+            g.fillRect(CARD_W / 2 - 3, 50, 6, 8);
+        }
+        function drawWeaponIcon() {
+            g.fillStyle(0xffffff, 0.15);
+            g.fillRect(CARD_W / 2 - 2, 26, 4, 32);
+            g.fillRect(CARD_W / 2 - 14, 50, 28, 5);
+            g.fillRect(CARD_W / 2 - 1, 42, 3, 14);
+            g.fillStyle(0xffffff, 0.08);
+            g.fillCircle(CARD_W / 2, 28, 5);
+        }
+        function drawPotionIcon() {
+            g.fillStyle(0xffffff, 0.15);
+            g.fillRect(CARD_W / 2 - 7, 30, 14, 5);
+            g.fillRect(CARD_W / 2 - 3, 25, 7, 7);
+            g.fillRect(CARD_W / 2 - 10, 35, 21, 18);
+            g.fillStyle(0xffffff, 0.08);
+            g.fillRect(CARD_W / 2 - 8, 48, 17, 9);
+            g.fillStyle(0xffffff, 0.2);
+            g.fillCircle(CARD_W / 2, 40, 4);
+        }
 
-        // --- Weapon card face ---
-        drawCardFace(g, COLORS.weaponDark, COLORS.weapon);
-        // Draw sword icon
-        g.fillStyle(0xffffff, 0.15);
-        g.fillRect(CARD_W / 2 - 3, 28, 6, 36);
-        g.fillRect(CARD_W / 2 - 16, 54, 32, 6);
-        g.fillRect(CARD_W / 2 - 2, 46, 4, 16);
-        g.fillStyle(COLORS.weaponDark, 1);
-        g.fillCircle(CARD_W / 2, 30, 5);
-        g.generateTexture('card_weapon', CARD_W, CARD_H);
+        // --- Dark card textures ---
+        drawCardFace(g, THEMES.dark.cardMonsterBg, THEMES.dark.cardMonsterBorder);
+        drawMonsterIcon(); g.generateTexture('card_monster_d', CARD_W, CARD_H);
 
-        // --- Potion card face ---
-        drawCardFace(g, COLORS.potionDark, COLORS.potion);
-        // Draw potion icon (flask)
-        g.fillStyle(0xffffff, 0.15);
-        g.fillRect(CARD_W / 2 - 8, 32, 16, 6);
-        g.fillRect(CARD_W / 2 - 4, 28, 8, 8);
-        g.fillRect(CARD_W / 2 - 12, 38, 24, 20);
-        g.fillStyle(COLORS.potionDark, 1);
-        g.fillRect(CARD_W / 2 - 10, 52, 20, 10);
-        g.fillStyle(0xffffff, 0.25);
-        g.fillCircle(CARD_W / 2, 44, 5);
-        g.generateTexture('card_potion', CARD_W, CARD_H);
+        drawCardFace(g, THEMES.dark.cardWeaponBg, THEMES.dark.cardWeaponBorder);
+        drawWeaponIcon(); g.generateTexture('card_weapon_d', CARD_W, CARD_H);
+
+        drawCardFace(g, THEMES.dark.cardPotionBg, THEMES.dark.cardPotionBorder);
+        drawPotionIcon(); g.generateTexture('card_potion_d', CARD_W, CARD_H);
+
+        // --- Light card textures ---
+        drawCardFace(g, THEMES.light.cardMonsterBg, THEMES.light.cardMonsterBorder);
+        drawMonsterIcon(); g.generateTexture('card_monster_l', CARD_W, CARD_H);
+
+        drawCardFace(g, THEMES.light.cardWeaponBg, THEMES.light.cardWeaponBorder);
+        drawWeaponIcon(); g.generateTexture('card_weapon_l', CARD_W, CARD_H);
+
+        drawCardFace(g, THEMES.light.cardPotionBg, THEMES.light.cardPotionBorder);
+        drawPotionIcon(); g.generateTexture('card_potion_l', CARD_W, CARD_H);
 
         // --- Button texture ---
         g.clear();
         g.fillStyle(COLORS.buttonBg, 1);
-        g.fillRoundedRect(0, 0, 200, 46, 12);
+        g.fillRoundedRect(0, 0, 194, 46, 11);
         g.lineStyle(2, 0xa080e0, 1);
-        g.strokeRoundedRect(0, 0, 200, 46, 12);
-        g.generateTexture('btn_pass', 200, 46);
+        g.strokeRoundedRect(0, 0, 194, 46, 11);
+        g.generateTexture('btn_pass', 194, 46);
 
         g.destroy();
     }
@@ -213,6 +284,7 @@
         // ── Background ──
         // Subtle grid pattern
         const bgGfx = s.add.graphics();
+        s.bgGfx = bgGfx;
         bgGfx.fillStyle(0x1a1a3e, 0.3);
         for (let x = 0; x < CANVAS_W; x += 60) {
             bgGfx.fillRect(x, 0, 1, CANVAS_H);
@@ -222,29 +294,31 @@
         }
 
         // ── Title (top) ──
-        s.add.text(CANVAS_W / 2, 22, '⚔️ 地牢探险', {
-            fontSize: '20px',
+        const titleText = s.add.text(CANVAS_W / 2, 21, '⚔️ 地牢探险', {
+            fontSize: '18px',
             fill: '#f0c040',
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
         }).setOrigin(0.5);
+        s.titleText = titleText;
 
         // ── Top divider line ──
         const topLine = s.add.graphics();
+        s.topLineGfx = topLine;
         topLine.lineStyle(1, 0x3a3a6a, 0.4);
-        topLine.lineBetween(30, 44, CANVAS_W - 30, 44);
+        topLine.lineBetween(15, 41, CANVAS_W - 15, 41);
 
         // ── Skip Room Button (top-right) ──
-        const skipX = 830;
-        const skipY = 22;
-        const skipW = 90;
-        const skipH = 28;
+        const skipX = 423;
+        const skipY = 21;
+        const skipW = 92;
+        const skipH = 27;
 
         const skipBg = s.add.graphics();
         s.skipBg = skipBg;
 
         const skipText = s.add.text(skipX, skipY, '⏭️ 跳过', {
-            fontSize: '12px',
+            fontSize: '11px',
             fill: '#cccce0',
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
@@ -264,79 +338,98 @@
         });
         s.skipZone = skipZone;
 
+        // ── Theme Toggle Button (top-left) ──
+        s.theme = 'dark';
+        const themeX = 57;
+        const themeY = 21;
+        const themeW = 44;
+        const themeH = 27;
+
+        const themeBg = s.add.graphics();
+        s.themeBg = themeBg;
+
+        const themeBtnText = s.add.text(themeX, themeY, '🌙', {
+            fontSize: '16px'
+        }).setOrigin(0.5);
+        s.themeBtnText = themeBtnText;
+
+        const themeZone = s.add.zone(themeX, themeY, themeW, themeH)
+            .setInteractive({ useHandCursor: true });
+        themeZone.on('pointerdown', () => toggleTheme(s));
+        s.themeZone = themeZone;
+
         // ═══════════════════════════════════════════════════
         //  BOTTOM STATS BAR (all player info moved here)
         // ═══════════════════════════════════════════════════
-        const statsY = 505;
-        const statsH = 72;
-        s.statsY = statsY; // store for toggle update function
+        const statsY = 649;
+        const statsH = 74;
+        s.statsY = statsY;
 
         // Stats bar background
         const statsBg = s.add.graphics();
+        s.statsBgGfx = statsBg;
         statsBg.fillStyle(COLORS.headerBg, 0.85);
-        statsBg.fillRoundedRect(15, statsY, CANVAS_W - 30, statsH, 10);
+        statsBg.fillRoundedRect(8, statsY, CANVAS_W - 16, statsH, 10);
         statsBg.lineStyle(1, 0x3a3a6a, 0.5);
-        statsBg.strokeRoundedRect(15, statsY, CANVAS_W - 30, statsH, 10);
+        statsBg.strokeRoundedRect(8, statsY, CANVAS_W - 16, statsH, 10);
 
-        // ── HP Display (left third) ──
-        s.add.text(90, statsY + 17, '❤️ 生命值', {
-            fontSize: '12px',
+        // ── HP Display (left) ──
+        s.add.text(48, statsY + 15, '❤️', {
+            fontSize: '14px',
             fill: '#cccce0',
             fontFamily: 'Microsoft YaHei, sans-serif'
         }).setOrigin(0.5);
 
-        const hpText = s.add.text(140, statsY + 44, '', {
-            fontSize: '15px',
+        const hpText = s.add.text(105, statsY + 32, '', {
+            fontSize: '13px',
             fill: '#ffffff',
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
         }).setOrigin(0.5);
         s.hpText = hpText;
 
-        // HP bar background
+        // HP bar
         const hpBarBg = s.add.graphics();
         hpBarBg.fillStyle(0x333355, 1);
-        hpBarBg.fillRoundedRect(0, 0, 200, 14, 7);
-        hpBarBg.x = 175;
-        hpBarBg.y = statsY + 36;
+        hpBarBg.fillRoundedRect(0, 0, 140, 12, 6);
+        hpBarBg.x = 44;
+        hpBarBg.y = statsY + 48;
 
-        // HP bar fill
         const hpBarFill = s.add.graphics();
-        hpBarFill.x = 175;
-        hpBarFill.y = statsY + 36;
+        hpBarFill.x = 44;
+        hpBarFill.y = statsY + 48;
         s.hpBarFill = hpBarFill;
 
-        // ── Weapon Display (center third) ──
-        s.add.text(450, statsY + 17, '🗡️ 装备武器', {
-            fontSize: '12px',
+        // ── Weapon Display (center) ──
+        s.add.text(260, statsY + 15, '🗡️ 武器', {
+            fontSize: '11px',
             fill: '#cccce0',
             fontFamily: 'Microsoft YaHei, sans-serif'
         }).setOrigin(0.5);
 
-        const weaponText = s.add.text(450, statsY + 42, '无', {
-            fontSize: '15px',
+        const weaponText = s.add.text(260, statsY + 32, '无', {
+            fontSize: '13px',
             fill: '#8888aa',
             fontFamily: 'Microsoft YaHei, sans-serif'
         }).setOrigin(0.5);
         s.weaponText = weaponText;
 
-        // ── Weapon Toggle Button (below weapon value) ──
-        const toggleW = 130;
-        const toggleH = 20;
-        const toggleX = 450;
-        const toggleY = statsY + 63;
+        // ── Weapon Toggle Button ──
+        const toggleW = 110;
+        const toggleH = 21;
+        const toggleX = 260;
+        const toggleY = statsY + 62;
 
         const toggleBg = s.add.graphics();
         s.weaponToggleBg = toggleBg;
 
         const toggleText = s.add.text(toggleX, toggleY, '', {
-            fontSize: '11px',
+            fontSize: '10px',
             fill: '#ffffff',
             fontFamily: 'Microsoft YaHei, sans-serif'
         }).setOrigin(0.5);
         s.weaponToggleText = toggleText;
 
-        // Toggle hit zone
         const toggleZone = s.add.zone(toggleX, toggleY, toggleW, toggleH)
             .setInteractive({ useHandCursor: true });
         toggleZone.on('pointerdown', () => {
@@ -344,9 +437,9 @@
             gameState.useWeapon = !gameState.useWeapon;
             updateWeaponToggle(s);
             if (gameState.useWeapon) {
-                showMessage(s, '⚔️ 武器已启用 — 战斗时将尝试使用武器攻击');
+                showMessage(s, '⚔️ 武器已启用');
             } else {
-                showMessage(s, '🔒 武器已停用 — 将徒手战斗，不消耗武器等级');
+                showMessage(s, '🔒 武器已停用');
             }
         });
         toggleZone.on('pointerover', () => {
@@ -357,13 +450,13 @@
         });
         s.weaponToggleZone = toggleZone;
 
-        // ── Room / Deck Display (right third) ──
-        const roomDeckText = s.add.text(780, statsY + 22, '', {
-            fontSize: '12px',
+        // ── Room / Deck Display (right) ──
+        const roomDeckText = s.add.text(405, statsY + 20, '', {
+            fontSize: '11px',
             fill: '#aaaacc',
             fontFamily: 'Microsoft YaHei, sans-serif',
             align: 'center',
-            lineSpacing: 4
+            lineSpacing: 3
         }).setOrigin(0.5, 0);
         s.roomDeckText = roomDeckText;
 
@@ -379,7 +472,7 @@
 
         for (let i = 0; i < CARDS_PER_ROOM; i++) {
             const cx = CARD_X[i];
-            const cy = CARD_Y;
+            const cy = CARD_Y[i];
 
             // Empty slot indicator (shown when no card)
             const slotGfx = s.add.graphics();
@@ -390,22 +483,22 @@
             s.slotGfxs.push(slotGfx);
 
             // Card background image
-            const bg = s.add.image(cx, cy, 'card_monster');
+            const bg = s.add.image(cx, cy, 'card_monster_d');
             bg.setVisible(false);
             bg.setInteractive({ useHandCursor: true });
             s.cardBgs.push(bg);
 
             // Type label (top of card)
-            const typeLabel = s.add.text(cx, cy - 85, '', {
-                fontSize: '11px',
+            const typeLabel = s.add.text(cx, cy - 74, '', {
+                fontSize: '10px',
                 fill: '#ccccee',
                 fontFamily: 'Microsoft YaHei, sans-serif',
             }).setOrigin(0.5).setVisible(false);
             s.cardTypeLabels.push(typeLabel);
 
             // Value (center, large)
-            const valueText = s.add.text(cx, cy + 6, '', {
-                fontSize: '44px',
+            const valueText = s.add.text(cx, cy + 4, '', {
+                fontSize: '36px',
                 fill: '#ffffff',
                 fontFamily: 'Georgia, serif',
                 fontStyle: 'bold'
@@ -413,21 +506,21 @@
             s.cardValueTexts.push(valueText);
 
             // Unit label
-            const unitLabel = s.add.text(cx, cy + 50, '', {
-                fontSize: '13px',
+            const unitLabel = s.add.text(cx, cy + 42, '', {
+                fontSize: '12px',
                 fill: '#aaaacc',
                 fontFamily: 'Microsoft YaHei, sans-serif',
             }).setOrigin(0.5).setVisible(false);
             s.cardUnitLabels.push(unitLabel);
 
             // Dark overlay (for processed cards)
-            const overlay = s.add.rectangle(cx, cy, CARD_W - 8, CARD_H - 8, COLORS.overlay, 0.55)
+            const overlay = s.add.rectangle(cx, cy, CARD_W - 6, CARD_H - 6, COLORS.overlay, 0.55)
                 .setVisible(false);
             s.cardOverlays.push(overlay);
 
             // Status text (DEFEATED / USED / EQUIPPED)
-            const statusText = s.add.text(cx, cy + 80, '', {
-                fontSize: '14px',
+            const statusText = s.add.text(cx, cy + 68, '', {
+                fontSize: '12px',
                 fill: '#ff8888',
                 fontFamily: 'Microsoft YaHei, sans-serif',
                 fontStyle: 'bold'
@@ -443,7 +536,7 @@
         // ── Monster Action Button (shared, hidden initially) ──
         s.selectedCardIndex = -1;
 
-        const actionBtnW = 170;
+        const actionBtnW = 152;
         const actionBtnH = 34;
         const actionBtnBg = s.add.graphics().setVisible(false).setDepth(5);
         s.actionBtnBg = actionBtnBg;
@@ -479,31 +572,32 @@
 
         // ── Message Area ──
         const msgBg = s.add.graphics();
+        s.msgBgGfx = msgBg;
         msgBg.fillStyle(COLORS.headerBg, 0.6);
-        msgBg.fillRoundedRect(30, 410, CANVAS_W - 60, 74, 8);
+        msgBg.fillRoundedRect(15, 569, CANVAS_W - 30, 64, 9);
         msgBg.lineStyle(1, 0x3a3a6a, 0.3);
-        msgBg.strokeRoundedRect(30, 410, CANVAS_W - 60, 74, 8);
+        msgBg.strokeRoundedRect(15, 569, CANVAS_W - 30, 64, 9);
 
-        const messageText = s.add.text(CANVAS_W / 2, 447, '选择一张卡牌开始行动吧！\n打怪物、装备武器或使用血瓶', {
-            fontSize: '14px',
+        const messageText = s.add.text(CANVAS_W / 2, 601, '选择卡牌开始行动吧！\n打怪物、装备武器或使用血瓶', {
+            fontSize: '13px',
             fill: '#aaaacc',
             fontFamily: 'Microsoft YaHei, sans-serif',
             align: 'center',
-            lineSpacing: 4
+            lineSpacing: 3
         }).setOrigin(0.5);
         s.messageText = messageText;
 
         // ── Next Room Button ──
-        const btnContainer = s.add.container(CANVAS_W / 2, 600);
+        const btnContainer = s.add.container(CANVAS_W / 2, 745);
         const btnBg = s.add.image(0, 0, 'btn_pass');
-        const btnText = s.add.text(0, 0, '▶  进入下一房间', {
-            fontSize: '16px',
+        const btnText = s.add.text(0, 0, '▶ 进入下一房间', {
+            fontSize: '14px',
             fill: '#ffffff',
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
         }).setOrigin(0.5);
         btnContainer.add([btnBg, btnText]);
-        btnContainer.setSize(200, 46);
+        btnContainer.setSize(194, 46);
         btnContainer.setInteractive({ useHandCursor: true });
         btnContainer.setVisible(false);
         btnContainer.setAlpha(0);
@@ -528,16 +622,16 @@
         endOverlay.setDepth(100);
         s.endOverlay = endOverlay;
 
-        const endTitle = s.add.text(CANVAS_W / 2, 200, '', {
-            fontSize: '48px',
+        const endTitle = s.add.text(CANVAS_W / 2, 286, '', {
+            fontSize: '44px',
             fill: '#ffffff',
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
         }).setOrigin(0.5).setDepth(101).setVisible(false);
         s.endTitle = endTitle;
 
-        const endSubtitle = s.add.text(CANVAS_W / 2, 270, '', {
-            fontSize: '18px',
+        const endSubtitle = s.add.text(CANVAS_W / 2, 366, '', {
+            fontSize: '16px',
             fill: '#cccce0',
             fontFamily: 'Microsoft YaHei, sans-serif',
             align: 'center'
@@ -546,13 +640,13 @@
 
         const restartBtnBg = s.add.graphics();
         restartBtnBg.fillStyle(COLORS.buttonBg, 1);
-        restartBtnBg.fillRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+        restartBtnBg.fillRoundedRect(CANVAS_W / 2 - 103, 423, 206, 50, 13);
         restartBtnBg.lineStyle(2, 0xa080e0, 1);
-        restartBtnBg.strokeRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+        restartBtnBg.strokeRoundedRect(CANVAS_W / 2 - 103, 423, 206, 50, 13);
         restartBtnBg.setDepth(101).setVisible(false);
         s.restartBtnBg = restartBtnBg;
 
-        const restartText = s.add.text(CANVAS_W / 2, 343, '🔄  再来一局', {
+        const restartText = s.add.text(CANVAS_W / 2, 448, '🔄 再来一局', {
             fontSize: '16px',
             fill: '#ffffff',
             fontFamily: 'Microsoft YaHei, sans-serif',
@@ -561,22 +655,22 @@
         s.restartText = restartText;
 
         // Restart hit zone
-        const restartZone = s.add.zone(CANVAS_W / 2, 343, 200, 46)
+        const restartZone = s.add.zone(CANVAS_W / 2, 448, 206, 50)
             .setDepth(102).setInteractive({ useHandCursor: true }).setVisible(false);
         restartZone.on('pointerdown', () => restartGame(s));
         restartZone.on('pointerover', () => {
             restartBtnBg.clear();
             restartBtnBg.fillStyle(COLORS.buttonHover, 1);
-            restartBtnBg.fillRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+            restartBtnBg.fillRoundedRect(CANVAS_W / 2 - 103, 423, 206, 50, 13);
             restartBtnBg.lineStyle(2, 0xa080e0, 1);
-            restartBtnBg.strokeRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+            restartBtnBg.strokeRoundedRect(CANVAS_W / 2 - 103, 423, 206, 50, 13);
         });
         restartZone.on('pointerout', () => {
             restartBtnBg.clear();
             restartBtnBg.fillStyle(COLORS.buttonBg, 1);
-            restartBtnBg.fillRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+            restartBtnBg.fillRoundedRect(CANVAS_W / 2 - 103, 423, 206, 50, 13);
             restartBtnBg.lineStyle(2, 0xa080e0, 1);
-            restartBtnBg.strokeRoundedRect(CANVAS_W / 2 - 100, 320, 200, 46, 12);
+            restartBtnBg.strokeRoundedRect(CANVAS_W / 2 - 103, 423, 206, 50, 13);
         });
         s.restartZone = restartZone;
 
@@ -588,8 +682,8 @@
         updateUI(s);
 
         // Welcome animation
-        showMessage(s, '⚔️ 欢迎来到地牢！共有 ' + (DECK_MONSTERS + DECK_WEAPONS + DECK_POTIONS) + ' 张牌，' +
-            Math.floor((DECK_MONSTERS + DECK_WEAPONS + DECK_POTIONS) / CARDS_PER_ROOM) + ' 个房间\n选择卡牌开始你的冒险吧！');
+        showMessage(s, '⚔️ 欢迎来到地牢！共有 ' + DECK_TOTAL + ' 张牌，' +
+            Math.floor(DECK_TOTAL / CARDS_PER_ROOM) + ' 个房间\n选择卡牌开始你的冒险吧！');
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -617,25 +711,31 @@
             }
 
             // Set texture
-            const texKey = card.type === 'monster' ? 'card_monster' :
-                           card.type === 'weapon' ? 'card_weapon' : 'card_potion';
+            const suffix = s.theme === 'dark' ? '_d' : '_l';
+            const texKey = (card.type === 'monster' ? 'card_monster' :
+                            card.type === 'weapon' ? 'card_weapon' : 'card_potion') + suffix;
             bg.setTexture(texKey);
             bg.setVisible(true);
+
+            // Theme-aware text colors
+            const t = THEMES[s.theme];
+            const txtLight = '#' + t.textLight.toString(16).padStart(6, '0');
+            const txtDim = '#' + t.textDim.toString(16).padStart(6, '0');
 
             // Type label
             const typeStr = card.type === 'monster' ? '👹 怪物' :
                             card.type === 'weapon' ? '⚔️ 武器' : '🧪 血瓶';
-            typeLabel.setText(typeStr).setVisible(true).setAlpha(1);
+            typeLabel.setText(typeStr).setVisible(true).setAlpha(1).setFill(txtDim);
 
             // Value
             const val = card.type === 'monster' ? card.hp :
                         card.type === 'weapon' ? card.atk : card.heal;
-            valueText.setText(String(val)).setVisible(true).setAlpha(1);
+            valueText.setText(String(val)).setVisible(true).setAlpha(1).setFill(txtLight);
 
             // Unit label
             const unitStr = card.type === 'monster' ? 'HP' :
                             card.type === 'weapon' ? 'ATK' : '恢复';
-            unitLabel.setText(unitStr).setVisible(true).setAlpha(1);
+            unitLabel.setText(unitStr).setVisible(true).setAlpha(1).setFill(txtDim);
 
             // Processed state
             if (processed) {
@@ -643,7 +743,7 @@
                 s.cardOverlays[i].setVisible(true).setAlpha(1);
                 const statusStr = card.type === 'monster' ? '☠️ 已击败' :
                                   card.type === 'weapon' ? '✅ 已装备' : '✅ 已使用';
-                s.cardStatusTexts[i].setText(statusStr).setVisible(true).setAlpha(1);
+                s.cardStatusTexts[i].setText(statusStr).setVisible(true).setAlpha(1).setFill('#ff8888');
                 bg.disableInteractive();
             } else {
                 bg.clearTint();
@@ -660,16 +760,85 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  WEAPON TOGGLE DISPLAY
+    //  THEME
+    // ═══════════════════════════════════════════════════════════════
+    function toggleTheme(s) {
+        s.theme = (s.theme === 'dark') ? 'light' : 'dark';
+        applyTheme(s);
+        renderCards(s);
+        updateUI(s);
+    }
+
+    function applyTheme(s) {
+        const t = THEMES[s.theme];
+        const isDark = s.theme === 'dark';
+
+        // Canvas background
+        s.cameras.main.setBackgroundColor(t.bg);
+
+        // Grid pattern
+        s.bgGfx.clear();
+        s.bgGfx.fillStyle(t.gridColor, t.gridAlpha);
+        for (let x = 0; x < CANVAS_W; x += 60) {
+            s.bgGfx.fillRect(x, 0, 1, CANVAS_H);
+        }
+        for (let y = 0; y < CANVAS_H; y += 60) {
+            s.bgGfx.fillRect(0, y, CANVAS_W, 1);
+        }
+
+        // Stats bar
+        s.statsBgGfx.clear();
+        s.statsBgGfx.fillStyle(t.headerBg, 0.85);
+        s.statsBgGfx.fillRoundedRect(8, s.statsY, CANVAS_W - 16, 74, 10);
+        s.statsBgGfx.lineStyle(1, t.divider, 0.5);
+        s.statsBgGfx.strokeRoundedRect(8, s.statsY, CANVAS_W - 16, 74, 10);
+
+        // Message background
+        s.msgBgGfx.clear();
+        s.msgBgGfx.fillStyle(t.headerBg, 0.6);
+        s.msgBgGfx.fillRoundedRect(15, 569, CANVAS_W - 30, 64, 9);
+        s.msgBgGfx.lineStyle(1, t.divider, 0.3);
+        s.msgBgGfx.strokeRoundedRect(15, 569, CANVAS_W - 30, 64, 9);
+
+        // Top divider
+        s.topLineGfx.clear();
+        s.topLineGfx.lineStyle(1, t.divider, 0.4);
+        s.topLineGfx.lineBetween(15, 41, CANVAS_W - 15, 41);
+
+        // Update known UI text colors
+        const txtLight = '#' + t.textLight.toString(16).padStart(6, '0');
+        const txtDim = '#' + t.textDim.toString(16).padStart(6, '0');
+        const txtAccent = '#' + t.accent.toString(16).padStart(6, '0');
+
+        if (s.titleText) s.titleText.setFill(txtAccent);
+        if (s.hpText) s.hpText.setFill(txtLight);
+        if (s.weaponText) s.weaponText.setFill(gameState.weapon ? txtAccent : txtDim);
+        if (s.messageText) s.messageText.setFill(txtDim);
+        if (s.roomDeckText) s.roomDeckText.setFill(txtDim);
+        if (s.skipText) s.skipText.setFill(isDark ? '#cccce0' : '#555566');
+
+        // Theme button
+        s.themeBtnText.setText(isDark ? '🌙' : '☀️');
+        s.themeBg.clear();
+        s.themeBg.fillStyle(t.headerBg, 0.8);
+        s.themeBg.fillRoundedRect(57 - 22, 21 - 14, 44, 27, 7);
+
+        // Button tint for next room
+        if (s.nextRoomBtnBg) {
+            s.nextRoomBtnBg.setTint(isDark ? 0xffffff : 0xcccccc);
+        }
+
+        showMessage(s, isDark ? '🌙 已切换至暗色主题' : '☀️ 已切换至亮色主题');
+    }
     // ═══════════════════════════════════════════════════════════════
     function updateWeaponToggle(s) {
         const toggleBg = s.weaponToggleBg;
         const toggleText = s.weaponToggleText;
         const toggleZone = s.weaponToggleZone;
-        const toggleX = 450;
-        const toggleY = s.statsY + 63;
-        const toggleW = 130;
-        const toggleH = 20;
+        const toggleX = 260;
+        const toggleY = s.statsY + 62;
+        const toggleW = 110;
+        const toggleH = 21;
 
         if (!gameState.weapon || gameState.gameOver || gameState.gameWon) {
             // No weapon — hide toggle
@@ -693,12 +862,12 @@
             toggleBg.strokeRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
             toggleText.setText('⚔️ 使用武器').setFill('#4eff8e');
         } else {
-            // Dark gray — weapon disabled
-            toggleBg.fillStyle(0x3a3a3a, 0.8);
+            // Gray — weapon disabled (lighter in light theme)
+            toggleBg.fillStyle(s.theme === 'dark' ? 0x3a3a3a : 0xd8d8d8, 0.8);
             toggleBg.fillRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
-            toggleBg.lineStyle(1, 0x666666, 0.5);
+            toggleBg.lineStyle(1, s.theme === 'dark' ? 0x666666 : 0xaaaaaa, 0.5);
             toggleBg.strokeRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
-            toggleText.setText('🔒 不用武器').setFill('#aaaaaa');
+            toggleText.setText('🔒 不用武器').setFill(s.theme === 'dark' ? '#aaaaaa' : '#666666');
         }
     }
 
@@ -711,35 +880,39 @@
         const hpColor = gameState.playerHP > 12 ? COLORS.hpGreen :
                         gameState.playerHP > 5  ? COLORS.hpYellow : COLORS.hpRed;
         s.hpText.setFill('#' + hpColor.toString(16).padStart(6, '0'));
+        // Also update the ❤️ label and message/roomdeck text for theme consistency
+        s.messageText.setFill('#' + THEMES[s.theme].textDim.toString(16).padStart(6, '0'));
+        s.roomDeckText.setFill('#' + THEMES[s.theme].textDim.toString(16).padStart(6, '0'));
 
         // HP bar
         const hpRatio = Math.max(0, gameState.playerHP / gameState.maxHP);
         const barColor = hpRatio > 0.6 ? COLORS.hpGreen :
                          hpRatio > 0.25 ? COLORS.hpYellow : COLORS.hpRed;
-        const barW = Math.max(0, Math.floor(200 * hpRatio));
+        const barW = Math.max(0, Math.floor(140 * hpRatio));
         s.hpBarFill.clear();
         if (barW > 0) {
             s.hpBarFill.fillStyle(barColor, 0.9);
-            s.hpBarFill.fillRoundedRect(0, 0, barW, 14, 7);
+            s.hpBarFill.fillRoundedRect(0, 0, barW, 12, 6);
             // Highlight
             s.hpBarFill.fillStyle(0xffffff, 0.15);
-            s.hpBarFill.fillRoundedRect(0, 0, barW, 7, { tl: 7, tr: 7, bl: 0, br: 0 });
+            s.hpBarFill.fillRoundedRect(0, 0, barW, 6, { tl: 6, tr: 6, bl: 0, br: 0 });
         }
 
         // Weapon
+        const t = THEMES[s.theme];
         if (gameState.weapon) {
             const lvlStr = gameState.weapon.level === Infinity ? '∞' : gameState.weapon.level;
             s.weaponText.setText('ATK:' + gameState.weapon.atk + '  LV:' + lvlStr);
-            s.weaponText.setFill('#f0c040');
+            s.weaponText.setFill('#' + t.accent.toString(16).padStart(6, '0'));
         } else {
             s.weaponText.setText('无');
-            s.weaponText.setFill('#8888aa');
+            s.weaponText.setFill('#' + t.textDim.toString(16).padStart(6, '0'));
         }
         updateWeaponToggle(s);
         updateSkipButton(s);
 
         // Room / Deck
-        const roomsTotal = Math.ceil((DECK_MONSTERS + DECK_WEAPONS + DECK_POTIONS) / CARDS_PER_ROOM);
+        const roomsTotal = Math.ceil(DECK_TOTAL / CARDS_PER_ROOM);
         s.roomDeckText.setText(
             '🏠 房间: ' + gameState.roomNumber + ' / ' + roomsTotal + '\n🃏 剩余: ' + gameState.deck.length + ' 张'
         );
@@ -847,11 +1020,11 @@
     function selectCard(s, index) {
         s.selectedCardIndex = index;
         const cx = CARD_X[index];
-        const cy = CARD_Y;
+        const cy = CARD_Y[index];
         const card = gameState.roomCards[index];
 
-        // Move card up (absolute targets to avoid tween conflicts)
-        const offsets = [0, -85, 6, 50, 0, 80]; // bg, typeLabel, valueText, unitLabel, overlay, statusText
+        // Move card up (absolute targets)
+        const offsets = [0, -74, 4, 42, 0, 68]; // bg, typeLabel, valueText, unitLabel, overlay, statusText
         const cardObjs = [
             s.cardBgs[index],
             s.cardTypeLabels[index],
@@ -865,11 +1038,12 @@
             s.tweens.add({ targets: obj, y: restY - 35, duration: 200, ease: 'Back.easeOut' });
         });
 
+        const btnW = 152;
+        const btnH = 34;
+        const btnY = cy + 102;
+
         // Compute & show action button (type-specific)
         const btnX = cx;
-        const btnY = cy + 120;
-        const btnW = 170;
-        const btnH = 34;
 
         s.actionBtnBg.clear();
         s.actionBtnBg.setPosition(btnX - btnW / 2, btnY - btnH / 2);
@@ -930,8 +1104,8 @@
         const index = s.selectedCardIndex;
         s.selectedCardIndex = -1;
 
-        const cy = CARD_Y;
-        const offsets = [0, -85, 6, 50, 0, 80];
+        const cy = CARD_Y[index];
+        const offsets = [0, -74, 4, 42, 0, 68];
         const cardObjs = [
             s.cardBgs[index],
             s.cardTypeLabels[index],
@@ -1245,21 +1419,22 @@
     }
 
     function updateSkipButton(s) {
+        const isDark = s.theme === 'dark';
         const canUse = gameState.canSkip && !gameState.gameOver && !gameState.gameWon;
         s.skipBg.clear();
         if (canUse) {
-            s.skipBg.fillStyle(0x3a2a5a, 0.9);
-            s.skipBg.fillRoundedRect(830 - 45, 22 - 14, 90, 28, 7);
-            s.skipBg.lineStyle(1, 0x8b5cf0, 0.7);
-            s.skipBg.strokeRoundedRect(830 - 45, 22 - 14, 90, 28, 7);
-            s.skipText.setFill('#c0b0f0');
+            s.skipBg.fillStyle(isDark ? 0x3a2a5a : 0xb8a8d8, 0.9);
+            s.skipBg.fillRoundedRect(423 - 46, 21 - 14, 92, 27, 8);
+            s.skipBg.lineStyle(1, isDark ? 0x8b5cf0 : 0x6040b0, 0.7);
+            s.skipBg.strokeRoundedRect(423 - 46, 21 - 14, 92, 27, 8);
+            s.skipText.setFill(isDark ? '#c0b0f0' : '#402880');
             s.skipZone.setInteractive({ useHandCursor: true });
         } else {
-            s.skipBg.fillStyle(0x2a2a3a, 0.6);
-            s.skipBg.fillRoundedRect(830 - 45, 22 - 14, 90, 28, 7);
-            s.skipBg.lineStyle(1, 0x444466, 0.3);
-            s.skipBg.strokeRoundedRect(830 - 45, 22 - 14, 90, 28, 7);
-            s.skipText.setFill('#666688');
+            s.skipBg.fillStyle(isDark ? 0x2a2a3a : 0xd0d0d0, 0.6);
+            s.skipBg.fillRoundedRect(423 - 46, 21 - 14, 92, 27, 8);
+            s.skipBg.lineStyle(1, isDark ? 0x444466 : 0xaaaaaa, 0.3);
+            s.skipBg.strokeRoundedRect(423 - 46, 21 - 14, 92, 27, 8);
+            s.skipText.setFill(isDark ? '#666688' : '#888899');
             s.skipZone.disableInteractive();
         }
     }
@@ -1367,7 +1542,7 @@
             }
         }
 
-        showMessage(s, '🔄 新的冒险开始！共有 ' + (DECK_MONSTERS + DECK_WEAPONS + DECK_POTIONS) + ' 张牌\n选择卡牌开始战斗吧！');
+        showMessage(s, '🔄 新的冒险开始！共有 ' + DECK_TOTAL + ' 张牌\n选择卡牌开始战斗吧！');
     }
     </script>
 </body>
