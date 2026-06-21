@@ -1,0 +1,12 @@
+{
+  "name": "dungeon-crawler",
+  "version": "1.0.0",
+  "description": "单人地牢探险卡牌桌游 — Phaser 3",
+  "private": true,
+  "scripts": {
+    "start": "npx http-server . -p 8080 -c-1 -o",
+    "dev": "npx http-server . -p 8080 -c-1"
+  },
+  "keywords": ["phaser", "card-game", "dungeon"],
+  "license": "MIT"
+}
