@@ -1415,14 +1415,23 @@
     // ═══════════════════════════════════════════════════════════════
     //  ROOM MANAGEMENT
     // ═══════════════════════════════════════════════════════════════
-    function drawRoom(s) {
+    function drawRoom(s, carryOver) {
         gameState.roomCards = [];
         gameState.roomProcessed = [];
         gameState.processedCount = 0;
         gameState.roomInteracted = false;
 
-        // Draw 4 cards
-        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+        // First, place any carry-over cards from the previous room
+        if (carryOver && carryOver.length > 0) {
+            for (let i = 0; i < carryOver.length; i++) {
+                gameState.roomCards.push(carryOver[i]);
+                gameState.roomProcessed.push(false);
+            }
+        }
+
+        // Then draw remaining cards from deck to fill 4 slots
+        const need = CARDS_PER_ROOM - gameState.roomCards.length;
+        for (let i = 0; i < need; i++) {
             if (gameState.deck.length > 0) {
                 gameState.roomCards.push(gameState.deck.shift());
                 gameState.roomProcessed.push(false);
@@ -1441,11 +1450,12 @@
             }
         }
 
-        if (existingId > 0) {
+        if (existingId > 0 && !carryOver) {
+            // Skipped room returning — keep original roomId
             gameState.currentRoomId = existingId;
         } else {
+            // New room (or carry-over) — assign fresh roomId to all cards
             gameState.currentRoomId = gameState.nextRoomId;
-            // Stamp roomId on all non-null cards
             for (let i = 0; i < CARDS_PER_ROOM; i++) {
                 if (gameState.roomCards[i]) {
                     gameState.roomCards[i].roomId = gameState.nextRoomId;
@@ -1473,6 +1483,14 @@
         }
         gameState.canSkip = true; // re-enable skip after normal room pass
 
+        // Collect unprocessed cards to carry over to next room
+        const carryOver = [];
+        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+            if (gameState.roomCards[i] && !gameState.roomProcessed[i]) {
+                carryOver.push(gameState.roomCards[i]);
+            }
+        }
+
         // Fade out old cards
         const fadeTargets = [];
         for (let i = 0; i < CARDS_PER_ROOM; i++) {
@@ -1490,8 +1508,8 @@
             duration: 250,
             ease: 'Power2',
             onComplete: () => {
-                // Draw new room
-                drawRoom(s);
+                // Draw new room with carry-over cards
+                drawRoom(s, carryOver);
                 renderCards(s);
 
                 // Fade in new cards
@@ -1514,8 +1532,12 @@
                 });
 
                 updateUI(s);
-                showMessage(s, '🚪 进入第 ' + gameState.currentRoomId +
-                    ' 号房间 | 剩余牌堆: ' + gameState.deck.length + ' 张');
+                let enterMsg = '🚪 进入第 ' + gameState.currentRoomId +
+                    ' 号房间 | 剩余牌堆: ' + gameState.deck.length + ' 张';
+                if (carryOver.length > 0) {
+                    enterMsg += '\n📥 上房间遗留 ' + carryOver.length + ' 张牌已加入当前房间';
+                }
+                showMessage(s, enterMsg);
             }
         });
     }
