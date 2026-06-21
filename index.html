@@ -432,22 +432,25 @@
         hpBarFill.y = statsY + 44;
         s.hpBarFill = hpBarFill;
 
-        // ── Weapon Display (center) ──
-        s.add.text(260, statsY + 15, '🗡️ 武器', {
-            fontSize: '11px',
-            fill: colorToHex(THEMES.dark.textSecondary),
-            fontFamily: 'Microsoft YaHei, sans-serif'
-        }).setOrigin(0.5);
-
-        const weaponText = s.add.text(260, statsY + 32, '无', {
+        // ── Weapon Display (right, prominent) ──
+        const weaponAreaX = 375;
+        s.add.text(weaponAreaX, statsY + 12, '🗡️ 武器', {
             fontSize: '13px',
             fill: colorToHex(THEMES.dark.textSecondary),
-            fontFamily: 'Microsoft YaHei, sans-serif'
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        const weaponText = s.add.text(weaponAreaX, statsY + 33, '无', {
+            fontSize: '16px',
+            fill: colorToHex(THEMES.dark.textSecondary),
+            fontFamily: 'Microsoft YaHei, sans-serif',
+            fontStyle: 'bold'
         }).setOrigin(0.5);
         s.weaponText = weaponText;
 
         // Weapon kill count
-        const killCountText = s.add.text(340, statsY + 42, '', {
+        const killCountText = s.add.text(weaponAreaX, statsY + 52, '', {
             fontSize: '11px',
             fill: colorToHex(THEMES.dark.textSecondary),
             fontFamily: 'Microsoft YaHei, sans-serif'
@@ -457,8 +460,8 @@
         // ── Weapon Toggle Button ──
         const toggleW = 110;
         const toggleH = 21;
-        const toggleX = 260;
-        const toggleY = statsY + 62;
+        const toggleX = weaponAreaX;
+        const toggleY = statsY + 67;
 
         const toggleBg = s.add.graphics();
         s.weaponToggleBg = toggleBg;
@@ -476,7 +479,7 @@
             if (gameState.gameOver || gameState.gameWon) return;
             gameState.useWeapon = !gameState.useWeapon;
             updateWeaponToggle(s);
-            // If a monster is selected, refresh its action button
+            renderCards(s);
             if (s.selectedCardIndex >= 0) {
                 refreshActionButton(s);
             }
@@ -493,16 +496,6 @@
             s.tweens.add({ targets: toggleText, scaleX: 1, scaleY: 1, duration: 80, ease: 'Power2' });
         });
         s.weaponToggleZone = toggleZone;
-
-        // ── Room / Deck Display (right) ──
-        const roomDeckText = s.add.text(405, statsY + 20, '', {
-            fontSize: '11px',
-            fill: colorToHex(THEMES.dark.textSecondary),
-            fontFamily: 'Microsoft YaHei, sans-serif',
-            align: 'center',
-            lineSpacing: 3
-        }).setOrigin(0.5, 0);
-        s.roomDeckText = roomDeckText;
 
         // ── Card Slots ──
         // Arrays to hold card display objects
@@ -789,6 +782,22 @@
                         card.type === 'weapon' ? card.atk : card.heal;
             valueText.setText(String(val)).setVisible(true).setAlpha(1).setFill(txtPri);
 
+            // Weapon effectiveness stroke on monster HP
+            if (card.type === 'monster' && !processed) {
+                const hasWeapon = gameState.weapon && gameState.useWeapon;
+                if (hasWeapon && gameState.weapon.level >= card.hp) {
+                    if (gameState.weapon.atk >= card.hp) {
+                        valueText.setStroke('#ff8800', 3);  // Orange: instant kill
+                    } else {
+                        valueText.setStroke('#ffcc00', 3);  // Yellow: weapon effective
+                    }
+                } else {
+                    valueText.setStroke('#ff4444', 3);  // Red: no weapon / disabled / level insufficient
+                }
+            } else {
+                valueText.setStroke('', 0);
+            }
+
             // Unit label
             const unitStr = card.type === 'monster' ? 'HP' :
                             card.type === 'weapon' ? '攻击力' : '恢复';
@@ -895,7 +904,6 @@
         if (s.weaponText) s.weaponText.setFill(gameState.weapon ? acc : sec);
         if (s.killCountText) s.killCountText.setFill(sec);
         if (s.messageText) s.messageText.setFill(sec);
-        if (s.roomDeckText) s.roomDeckText.setFill(sec);
         if (s.roomProgressText) s.roomProgressText.setFill(sec);
         if (s.endTitle) s.endTitle.setFill(colorToHex(t.textOverlay));
         if (s.endSubtitle) s.endSubtitle.setFill('#eee8d0');
@@ -917,8 +925,8 @@
         const toggleBg = s.weaponToggleBg;
         const toggleText = s.weaponToggleText;
         const toggleZone = s.weaponToggleZone;
-        const toggleX = 260;
-        const toggleY = s.statsY + 62;
+        const toggleX = 375;
+        const toggleY = s.statsY + 67;
         const toggleW = 110;
         const toggleH = 21;
 
@@ -962,13 +970,12 @@
                         gameState.playerHP > 5  ? COLORS.hpYellow : COLORS.hpRed;
         s.hpText.setFill('#' + hpColor.toString(16).padStart(6, '0'));
         // Room progress (above cards)
-        const totalRooms = Math.ceil(DECK_TOTAL / CARDS_PER_ROOM);
-        s.roomProgressText.setText('第 ' + gameState.currentRoomId + ' 号房间  已通过: ' + gameState.completedRooms.length + ' / ' + totalRooms);
+        const enemiesInDeck = gameState.deck.filter(function(c) { return c.type === 'monster'; }).length;
+        s.roomProgressText.setText('房间 ' + (gameState.completedRooms.length + 1) + ' — 剩余敌人 ' + enemiesInDeck + ' / ' + DECK_MONSTERS);
         s.roomProgressText.setFill(colorToHex(THEMES[s.theme].textSecondary));
 
         // Theme-consistent secondary text
         s.messageText.setFill(colorToHex(THEMES[s.theme].textSecondary));
-        s.roomDeckText.setFill(colorToHex(THEMES[s.theme].textSecondary));
 
         // HP bar
         const hpRatio = Math.max(0, gameState.playerHP / gameState.maxHP);
@@ -1000,12 +1007,6 @@
         updateWeaponToggle(s);
         updateSkipButton(s);
         refreshAllTextColors(s);
-
-        // Room / Deck
-        const roomsTotal = Math.ceil(DECK_TOTAL / CARDS_PER_ROOM);
-        s.roomDeckText.setText(
-            '✅ 已通过: ' + gameState.completedRooms.length + ' / ' + roomsTotal + '\n🃏 剩余: ' + gameState.deck.length + ' 张'
-        );
 
         // Next Room button
         const canPass = gameState.processedCount >= MIN_CARDS_TO_PASS ||
@@ -1114,7 +1115,7 @@
         const card = gameState.roomCards[index];
 
         // Move card up (absolute targets)
-        const offsets = [0, -74, 4, 42, 0, 68]; // bg, typeLabel, valueText, unitLabel, overlay, statusText
+        const offsets = [0, -68, 4, 42, 0, 68]; // bg, typeLabel, valueText, unitLabel, overlay, statusText
         const cardObjs = [
             s.cardBgs[index],
             s.cardTypeLabels[index],
@@ -1140,13 +1141,23 @@
 
         if (card.type === 'monster') {
             const preview = getCombatPreview(card);
+            const canUse = gameState.weapon && gameState.useWeapon && gameState.weapon.level >= card.hp;
             if (preview.instantKill) {
-                s.actionBtnBg.fillStyle(0x2a6a1a, 0.95);
+                // Instant kill — orange
+                s.actionBtnBg.fillStyle(0x4a2e00, 0.95);
                 s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
-                s.actionBtnBg.lineStyle(2, 0x4ecc2e, 0.9);
+                s.actionBtnBg.lineStyle(2, 0xff8800, 0.9);
                 s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
-                s.actionBtnText.setText('⚡ 斩杀').setFill('#6eff4e');
+                s.actionBtnText.setText('⚡ 斩杀').setFill('#ffaa33');
+            } else if (canUse) {
+                // Weapon effective but not instant kill — yellow
+                s.actionBtnBg.fillStyle(0x4a3a00, 0.95);
+                s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnBg.lineStyle(2, 0xe6b800, 0.9);
+                s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnText.setText('⚔️ 攻击(消耗' + preview.damageToPlayer + '点生命)').setFill('#ffcc44');
             } else {
+                // Cannot use weapon — red
                 s.actionBtnBg.fillStyle(0x6a2020, 0.95);
                 s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
                 s.actionBtnBg.lineStyle(2, 0xcc3333, 0.9);
