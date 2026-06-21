@@ -208,12 +208,18 @@
     ];
 
     const VICTORY_MESSAGES = [
-        '你成功征服了所有房间，光明重现！',
-        '恶棍们倒在你脚下，你是真正的王者！',
-        '带着满身伤痕与荣耀，你走出了地牢...',
-        '传说诞生了——你是这片黑暗中的第一缕光！',
-        '所有敌人都被你击败，宝座等待着你！',
-        '你赢了！啤酒和烤肉在酒馆等着你！',
+        '击败了所有敌人，您的英勇将载入史册！',
+        '每一个敌人都倒在你的剑下，和平重临这片大地...',
+        '血与火的试炼结束了，你是真正的传奇！',
+        '黑暗中最后一声哀嚎消散，你赢得了最终的胜利！',
+        '从此以后，酒馆里的吟游诗人将传唱你的名字...',
+        '敌人已全部倒下，你是无可争议的冠军！',
+        '以勇气为盾，以利刃为笔，你书写了属于自己的史诗！',
+        '所有敌人灰飞烟灭，你带着荣耀凯旋而归！',
+        '没有敌人能阻挡你的脚步——传说就此诞生！',
+        '你踏遍了每一个角落，斩尽了每一个敌人，胜利属于你！',
+        '这场战斗结束了，但你的传奇才刚刚开始...',
+        '满身伤痕是你荣耀的勋章，恭喜你，勇士！',
     ];
 
     // ═══════════════════════════════════════════════════════════════
@@ -970,9 +976,9 @@
         const hpColor = gameState.playerHP > 12 ? COLORS.hpGreen :
                         gameState.playerHP > 5  ? COLORS.hpYellow : COLORS.hpRed;
         s.hpText.setFill('#' + hpColor.toString(16).padStart(6, '0'));
-        // Room progress (above cards)
-        const enemiesInDeck = gameState.deck.filter(function(c) { return c.type === 'monster'; }).length;
-        s.roomProgressText.setText('房间 ' + (gameState.completedRooms.length + 1) + ' — 剩余敌人 ' + enemiesInDeck + ' / ' + DECK_MONSTERS);
+        // Room progress (above cards) — count remaining enemies
+        const totalRemaining = countRemainingEnemies();
+        s.roomProgressText.setText('房间 ' + (gameState.completedRooms.length + 1) + ' — 剩余敌人 ' + totalRemaining + ' / ' + DECK_MONSTERS);
         s.roomProgressText.setFill(colorToHex(THEMES[s.theme].textSecondary));
 
         // Theme-consistent secondary text
@@ -1415,6 +1421,9 @@
         // Check game over
         if (gameState.playerHP <= 0) {
             s.time.delayedCall(600, () => triggerGameOver(s));
+        } else if (countRemainingEnemies() === 0) {
+            // All enemies defeated — victory!
+            s.time.delayedCall(400, () => triggerVictory(s));
         } else {
             // Auto-check if all monsters in room are defeated
             checkAutoPass(s);
@@ -1544,14 +1553,26 @@
         }
     }
 
+    function countRemainingEnemies() {
+        var deckEnemies = gameState.deck.filter(function(c) { return c.type === 'monster'; }).length;
+        var roomEnemies = 0;
+        for (var i = 0; i < CARDS_PER_ROOM; i++) {
+            var c = gameState.roomCards[i];
+            if (c && c.type === 'monster' && !gameState.roomProcessed[i]) {
+                roomEnemies++;
+            }
+        }
+        return deckEnemies + roomEnemies;
+    }
+
     function passRoom(s) {
         if (gameState.gameOver || gameState.gameWon) return;
 
         // Deselect any selected card
         deselectCard(s);
 
-        // Check if deck is empty — if so, player wins!
-        if (gameState.deck.length === 0) {
+        // Check if all enemies are defeated — if so, player wins!
+        if (countRemainingEnemies() === 0) {
             triggerVictory(s);
             return;
         }
@@ -1882,11 +1903,11 @@
 
         s.time.delayedCall(400, () => {
             s.endOverlay.setVisible(true);
-            s.endTitle.setText('🏆 恶棍牌通关！').setVisible(true);
+            s.endTitle.setText('🏆 恭喜通关！').setVisible(true);
             const victoryMsg = VICTORY_MESSAGES[Math.floor(Math.random() * VICTORY_MESSAGES.length)];
             s.endSubtitle.setText(
                 victoryMsg + '\n' +
-                '通过全部 ' + gameState.completedRooms.length + ' 个房间 | 剩余生命: ' + gameState.playerHP + ' / ' + gameState.maxHP
+                '通过 ' + gameState.completedRooms.length + ' 个房间 | 剩余生命: ' + gameState.playerHP + ' / ' + gameState.maxHP
             ).setVisible(true);
             s.restartBtnBg.setVisible(true);
             s.restartText.setVisible(true);
