@@ -777,10 +777,11 @@
                             card.type === 'weapon' ? '⚔️ 武器' : '🧪 血瓶';
             typeLabel.setText(typeStr).setVisible(true).setAlpha(1).setFill(txtSec);
 
-            // Value
+            // Value (monster HP uses darker tone)
             const val = card.type === 'monster' ? card.hp :
                         card.type === 'weapon' ? card.atk : card.heal;
-            valueText.setText(String(val)).setVisible(true).setAlpha(1).setFill(txtPri);
+            const valColor = card.type === 'monster' ? (s.theme === 'dark' ? '#c8a090' : '#5a2028') : txtPri;
+            valueText.setText(String(val)).setVisible(true).setAlpha(1).setFill(valColor);
 
             // Weapon effectiveness stroke on monster HP
             if (card.type === 'monster' && !processed) {
