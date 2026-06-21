@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>地牢探险 - 单人卡牌桌游</title>
+    <title>恶棍牌 - 单人卡牌桌游</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
@@ -62,7 +62,7 @@
     const CARD_H = 210;
     // 2×2 grid: index 0=tl, 1=tr, 2=bl, 3=br
     const CARD_X = [133, 347, 133, 347];
-    const CARD_Y = [175, 175, 405, 405];
+    const CARD_Y = [200, 200, 430, 430];
 
     const COLORS = {
         bg:       0x12122a,
@@ -112,7 +112,7 @@
             skipBgOff:  0x2a2a3a, skipBorderOff: 0x444466,
             weaponToggleOffBg: 0x3a3a3a, weaponToggleOffBorder: 0x666666,
             // Card faces
-            cardMonsterBg: 0x7b1810, cardMonsterBorder: 0xc0392b,
+            cardMonsterBg: 0x4a2e2a, cardMonsterBorder: 0x725048,
             cardWeaponBg:  0x123a54, cardWeaponBorder:  0x2471a3,
             cardPotionBg:  0x0f4224, cardPotionBorder:  0x1e8449,
         },
@@ -194,6 +194,29 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  DEATH / VICTORY MESSAGES
+    // ═══════════════════════════════════════════════════════════════
+    const DEATH_MESSAGES = [
+        '击败了无数敌人，但邪恶还是吞噬了你...',
+        '黑暗淹没了你最后的喘息，冒险到此为止...',
+        '你的剑折断了，但你的传说留在了这地牢深处...',
+        '一步之遥便是胜利，可惜命运没有眷顾你...',
+        '鲜血染红了卡牌，你倒在了冰冷的石板地上...',
+        '你闭上了眼睛，耳边回响着怪物的低语...',
+        '英雄也会倒下，今天轮到你了...',
+        '胜败乃兵家常事，大侠请重新来过...',
+    ];
+
+    const VICTORY_MESSAGES = [
+        '你成功征服了所有房间，光明重现！',
+        '恶棍们倒在你脚下，你是真正的王者！',
+        '带着满身伤痕与荣耀，你走出了地牢...',
+        '传说诞生了——你是这片黑暗中的第一缕光！',
+        '所有敌人都被你击败，宝座等待着你！',
+        '你赢了！啤酒和烤肉在酒馆等着你！',
+    ];
+
+    // ═══════════════════════════════════════════════════════════════
     //  PHASER CONFIG
     // ═══════════════════════════════════════════════════════════════
     const config = {
@@ -226,54 +249,25 @@
     function preload() {
         const g = this.make.graphics({ add: false });
 
-        function drawMonsterIcon() {
-            g.fillStyle(0xffffff, 0.15);
-            g.fillCircle(CARD_W / 2, 48, 20);
-            g.fillStyle(0x000000, 0.6);
-            g.fillCircle(CARD_W / 2 - 7, 42, 4);
-            g.fillCircle(CARD_W / 2 + 7, 42, 4);
-            g.fillStyle(0xffffff, 0.25);
-            g.fillRect(CARD_W / 2 - 9, 54, 18, 3);
-            g.fillRect(CARD_W / 2 - 3, 50, 6, 8);
-        }
-        function drawWeaponIcon() {
-            g.fillStyle(0xffffff, 0.15);
-            g.fillRect(CARD_W / 2 - 2, 26, 4, 32);
-            g.fillRect(CARD_W / 2 - 14, 50, 28, 5);
-            g.fillRect(CARD_W / 2 - 1, 42, 3, 14);
-            g.fillStyle(0xffffff, 0.08);
-            g.fillCircle(CARD_W / 2, 28, 5);
-        }
-        function drawPotionIcon() {
-            g.fillStyle(0xffffff, 0.15);
-            g.fillRect(CARD_W / 2 - 7, 30, 14, 5);
-            g.fillRect(CARD_W / 2 - 3, 25, 7, 7);
-            g.fillRect(CARD_W / 2 - 10, 35, 21, 18);
-            g.fillStyle(0xffffff, 0.08);
-            g.fillRect(CARD_W / 2 - 8, 48, 17, 9);
-            g.fillStyle(0xffffff, 0.2);
-            g.fillCircle(CARD_W / 2, 40, 4);
-        }
-
         // --- Dark card textures ---
         drawCardFace(g, THEMES.dark.cardMonsterBg, THEMES.dark.cardMonsterBorder);
-        drawMonsterIcon(); g.generateTexture('card_monster_d', CARD_W, CARD_H);
+        g.generateTexture('card_monster_d', CARD_W, CARD_H);
 
         drawCardFace(g, THEMES.dark.cardWeaponBg, THEMES.dark.cardWeaponBorder);
-        drawWeaponIcon(); g.generateTexture('card_weapon_d', CARD_W, CARD_H);
+        g.generateTexture('card_weapon_d', CARD_W, CARD_H);
 
         drawCardFace(g, THEMES.dark.cardPotionBg, THEMES.dark.cardPotionBorder);
-        drawPotionIcon(); g.generateTexture('card_potion_d', CARD_W, CARD_H);
+        g.generateTexture('card_potion_d', CARD_W, CARD_H);
 
         // --- Light card textures ---
         drawCardFace(g, THEMES.light.cardMonsterBg, THEMES.light.cardMonsterBorder);
-        drawMonsterIcon(); g.generateTexture('card_monster_l', CARD_W, CARD_H);
+        g.generateTexture('card_monster_l', CARD_W, CARD_H);
 
         drawCardFace(g, THEMES.light.cardWeaponBg, THEMES.light.cardWeaponBorder);
-        drawWeaponIcon(); g.generateTexture('card_weapon_l', CARD_W, CARD_H);
+        g.generateTexture('card_weapon_l', CARD_W, CARD_H);
 
         drawCardFace(g, THEMES.light.cardPotionBg, THEMES.light.cardPotionBorder);
-        drawPotionIcon(); g.generateTexture('card_potion_l', CARD_W, CARD_H);
+        g.generateTexture('card_potion_l', CARD_W, CARD_H);
 
         // --- Button textures (dark + light) ---
         g.clear();
@@ -307,9 +301,6 @@
         // Border
         g.lineStyle(2, borderColor, 0.8);
         g.strokeRoundedRect(0, 0, CARD_W, CARD_H, 14);
-        // Top accent line
-        g.lineStyle(1, borderColor, 0.3);
-        g.lineBetween(20, 68, CARD_W - 20, 68);
         // Bottom accent line
         g.lineBetween(20, CARD_H - 52, CARD_W - 20, CARD_H - 52);
     }
@@ -333,7 +324,7 @@
         }
 
         // ── Title (top) ──
-        const titleText = s.add.text(CANVAS_W / 2, 21, '⚔️ 地牢探险', {
+        const titleText = s.add.text(CANVAS_W / 2, 21, '🃏 恶棍牌', {
             fontSize: '18px',
             fill: colorToHex(THEMES.dark.textAccent),
             fontFamily: 'Microsoft YaHei, sans-serif',
@@ -421,13 +412,7 @@
         statsBg.strokeRoundedRect(8, statsY, CANVAS_W - 16, statsH, 10);
 
         // ── HP Display (left) ──
-        s.add.text(48, statsY + 15, '❤️', {
-            fontSize: '14px',
-            fill: colorToHex(THEMES.dark.textSecondary),
-            fontFamily: 'Microsoft YaHei, sans-serif'
-        }).setOrigin(0.5);
-
-        const hpText = s.add.text(105, statsY + 32, '', {
+        const hpText = s.add.text(105, statsY + 26, '', {
             fontSize: '13px',
             fill: '#ffffff',
             fontFamily: 'Microsoft YaHei, sans-serif',
@@ -440,11 +425,11 @@
         hpBarBg.fillStyle(0x333355, 1);
         hpBarBg.fillRoundedRect(0, 0, 140, 12, 6);
         hpBarBg.x = 44;
-        hpBarBg.y = statsY + 48;
+        hpBarBg.y = statsY + 44;
 
         const hpBarFill = s.add.graphics();
         hpBarFill.x = 44;
-        hpBarFill.y = statsY + 48;
+        hpBarFill.y = statsY + 44;
         s.hpBarFill = hpBarFill;
 
         // ── Weapon Display (center) ──
@@ -548,8 +533,8 @@
             s.cardBgs.push(bg);
 
             // Type label (top of card)
-            const typeLabel = s.add.text(cx, cy - 74, '', {
-                fontSize: '10px',
+            const typeLabel = s.add.text(cx, cy - 68, '', {
+                fontSize: '25px',
                 fill: '#ccccee',
                 fontFamily: 'Microsoft YaHei, sans-serif',
             }).setOrigin(0.5).setVisible(false);
@@ -633,11 +618,11 @@
         const msgBg = s.add.graphics();
         s.msgBgGfx = msgBg;
         msgBg.fillStyle(COLORS.headerBg, 0.6);
-        msgBg.fillRoundedRect(15, 569, CANVAS_W - 30, 64, 9);
+        msgBg.fillRoundedRect(15, 585, CANVAS_W - 30, 52, 9);
         msgBg.lineStyle(1, 0x3a3a6a, 0.3);
-        msgBg.strokeRoundedRect(15, 569, CANVAS_W - 30, 64, 9);
+        msgBg.strokeRoundedRect(15, 585, CANVAS_W - 30, 52, 9);
 
-        const messageText = s.add.text(CANVAS_W / 2, 601, '选择卡牌开始行动吧！\n打怪物、装备武器或使用血瓶', {
+        const messageText = s.add.text(CANVAS_W / 2, 611, '选择卡牌开始行动吧！\n打敌人、装备武器或使用血瓶', {
             fontSize: '13px',
             fill: colorToHex(THEMES.dark.textSecondary),
             fontFamily: 'Microsoft YaHei, sans-serif',
@@ -647,7 +632,7 @@
         s.messageText = messageText;
 
         // ── Next Room Button ──
-        const btnContainer = s.add.container(CANVAS_W / 2, 745);
+        const btnContainer = s.add.container(CANVAS_W / 2, 555);
         const btnBg = s.add.image(0, 0, 'btn_pass_d');
         s.nextRoomBtnBgImg = btnBg;
         const btnText = s.add.text(0, 0, '▶ 进入下一房间', {
@@ -692,9 +677,10 @@
 
         const endSubtitle = s.add.text(CANVAS_W / 2, 366, '', {
             fontSize: '16px',
-            fill: colorToHex(THEMES.dark.textSecondary),
+            fill: '#eee8d0',
             fontFamily: 'Microsoft YaHei, sans-serif',
-            align: 'center'
+            align: 'center',
+            lineSpacing: 5
         }).setOrigin(0.5).setDepth(101).setVisible(false);
         s.endSubtitle = endSubtitle;
 
@@ -745,13 +731,21 @@
         refreshAllTextColors(s);
 
         // Welcome animation
-        showMessage(s, '⚔️ 欢迎来到地牢！共有 ' + DECK_TOTAL + ' 张牌，' +
+        showMessage(s, '🃏 欢迎来到恶棍牌！共有 ' + DECK_TOTAL + ' 张牌，' +
             Math.floor(DECK_TOTAL / CARDS_PER_ROOM) + ' 个房间\n选择卡牌开始你的冒险吧！');
     }
 
     // ═══════════════════════════════════════════════════════════════
     //  CARD RENDERING
     // ═══════════════════════════════════════════════════════════════
+    function getMonsterIcon(hp) {
+        if (hp >= 13) return '💀';      // 13-14: 骷髅
+        if (hp >= 10) return '👿';      // 10-12: 恶魔
+        if (hp >= 7)  return '👹';      // 7-9: 恶鬼
+        if (hp >= 4)  return '👺';      // 4-6: 天狗
+        return '👾';                     // 1-3: 小妖
+    }
+
     function renderCards(s) {
         for (let i = 0; i < CARDS_PER_ROOM; i++) {
             const card = gameState.roomCards[i];
@@ -786,7 +780,7 @@
             const txtSec = colorToHex(t.textSecondary);
 
             // Type label
-            const typeStr = card.type === 'monster' ? '👹 怪物' :
+            const typeStr = card.type === 'monster' ? getMonsterIcon(card.hp) + ' 敌人' :
                             card.type === 'weapon' ? '⚔️ 武器' : '🧪 血瓶';
             typeLabel.setText(typeStr).setVisible(true).setAlpha(1).setFill(txtSec);
 
@@ -865,9 +859,9 @@
         // Message background
         s.msgBgGfx.clear();
         s.msgBgGfx.fillStyle(t.headerBg, 0.6);
-        s.msgBgGfx.fillRoundedRect(15, 569, CANVAS_W - 30, 64, 9);
+        s.msgBgGfx.fillRoundedRect(15, 585, CANVAS_W - 30, 52, 9);
         s.msgBgGfx.lineStyle(1, t.divider, 0.3);
-        s.msgBgGfx.strokeRoundedRect(15, 569, CANVAS_W - 30, 64, 9);
+        s.msgBgGfx.strokeRoundedRect(15, 585, CANVAS_W - 30, 52, 9);
 
         // Top divider
         s.topLineGfx.clear();
@@ -904,7 +898,7 @@
         if (s.roomDeckText) s.roomDeckText.setFill(sec);
         if (s.roomProgressText) s.roomProgressText.setFill(sec);
         if (s.endTitle) s.endTitle.setFill(colorToHex(t.textOverlay));
-        if (s.endSubtitle) s.endSubtitle.setFill(sec);
+        if (s.endSubtitle) s.endSubtitle.setFill('#eee8d0');
         if (s.restartText) s.restartText.setFill(colorToHex(t.textButton));
         if (s.nextRoomBtn) {
             try {
@@ -1280,6 +1274,62 @@
     // ═══════════════════════════════════════════════════════════════
     //  COMBAT
     // ═══════════════════════════════════════════════════════════════
+    function playInstantKillEffect(s, index) {
+        const cx = CARD_X[index];
+        const cy = CARD_Y[index];
+        const card = s.cardBgs[index];
+
+        // 1. Slash X mark — two quick diagonal lines
+        const slashGfx = s.add.graphics().setDepth(10);
+        const slashLen = 70;
+        slashGfx.lineStyle(3, 0xffffff, 1);
+        // Line 1: top-left to bottom-right
+        slashGfx.lineBetween(cx - slashLen * 0.55, cy - slashLen * 0.55, cx + slashLen * 0.55, cy + slashLen * 0.55);
+        // Line 2: top-right to bottom-left
+        slashGfx.lineBetween(cx + slashLen * 0.55, cy - slashLen * 0.55, cx - slashLen * 0.55, cy + slashLen * 0.55);
+        s.tweens.add({
+            targets: slashGfx,
+            alpha: 0, duration: 350, ease: 'Power3',
+            onComplete: () => slashGfx.destroy()
+        });
+
+        // 2. Second slash — slightly offset, delayed, thicker
+        const slashGfx2 = s.add.graphics().setDepth(10);
+        slashGfx2.lineStyle(6, 0xffdd44, 0.85);
+        const off = 12;
+        slashGfx2.lineBetween(cx - slashLen * 0.5 + off, cy - slashLen * 0.5, cx + slashLen * 0.5 + off, cy + slashLen * 0.5);
+        slashGfx2.lineBetween(cx + slashLen * 0.5 - off, cy - slashLen * 0.5, cx - slashLen * 0.5 - off, cy + slashLen * 0.5);
+        s.tweens.add({
+            targets: slashGfx2,
+            alpha: 0, duration: 280, delay: 40, ease: 'Power3',
+            onComplete: () => slashGfx2.destroy()
+        });
+
+        // 3. Card impact pop — quick burst then settle
+        s.tweens.add({
+            targets: card,
+            scaleX: 1.15, scaleY: 1.15,
+            duration: 50, ease: 'Power4',
+            onComplete: () => {
+                s.tweens.add({
+                    targets: card,
+                    scaleX: 1.0, scaleY: 1.0,
+                    duration: 200, ease: 'Back.easeOut'
+                });
+            }
+        });
+
+        // 4. White flash overlay — independent of card tint
+        const flashOverlay = s.add.graphics().setDepth(10);
+        flashOverlay.fillStyle(0xffffff, 0.7);
+        flashOverlay.fillRoundedRect(cx - CARD_W / 2, cy - CARD_H / 2, CARD_W, CARD_H, 14);
+        s.tweens.add({
+            targets: flashOverlay,
+            alpha: 0, duration: 200, ease: 'Power2',
+            onComplete: () => flashOverlay.destroy()
+        });
+    }
+
     function fightMonster(s, index) {
         const monster = gameState.roomCards[index];
         const originalHP = monster.hp;
@@ -1296,13 +1346,14 @@
             if (remainingHP <= 0) {
                 // Instant kill!
                 damageToPlayer = 0;
+                playInstantKillEffect(s, index);
                 showMessage(s, '⚡ 武器攻击！攻击力 ' + gameState.weapon.atk +
-                    ' vs 怪物 HP ' + originalHP + ' → 秒杀！\n无伤击败怪物！（武器等级降为 ' + originalHP + '）');
+                    ' vs 敌人 HP ' + originalHP + ' → 秒杀！\n无伤击败敌人！（武器等级降为 ' + originalHP + '）');
             } else {
                 // Weapon reduces HP, player takes rest
                 damageToPlayer = remainingHP;
                 showMessage(s, '⚔️ 武器攻击削减 ' + gameState.weapon.atk + ' 点HP\n' +
-                    '怪物剩余 HP ' + remainingHP + '，你受到 ' + remainingHP + ' 点伤害（武器等级降为 ' + originalHP + '）');
+                    '敌人剩余 HP ' + remainingHP + '，你受到 ' + remainingHP + ' 点伤害（武器等级降为 ' + originalHP + '）');
             }
             // Update weapon level
             gameState.weapon.level = originalHP;
@@ -1312,15 +1363,15 @@
             if (gameState.weapon && !gameState.useWeapon) {
                 // Player has weapon but chose not to use it
                 showMessage(s, '🔒 武器已手动停用！徒手战斗\n' +
-                    '击败怪物（HP ' + monster.hp + '），受到 ' + damageToPlayer + ' 点伤害！（武器等级保持不变）');
+                    '击败敌人（HP ' + monster.hp + '），受到 ' + damageToPlayer + ' 点伤害！（武器等级保持不变）');
             } else if (gameState.weapon) {
                 // Level check failed
                 showMessage(s, '🔒 武器等级不足！（LV ' +
                     (gameState.weapon.level === Infinity ? '∞' : gameState.weapon.level) +
-                    ' < 怪物 HP ' + monster.hp + '）\n徒手战斗，受到 ' + damageToPlayer + ' 点伤害！');
+                    ' < 敌人 HP ' + monster.hp + '）\n徒手战斗，受到 ' + damageToPlayer + ' 点伤害！');
             } else {
                 // No weapon at all
-                showMessage(s, '👊 徒手战斗！\n击败怪物（HP ' + monster.hp + '），受到 ' + damageToPlayer + ' 点伤害！');
+                showMessage(s, '👊 徒手战斗！\n击败敌人（HP ' + monster.hp + '），受到 ' + damageToPlayer + ' 点伤害！');
             }
             weaponUsed = false;
         }
@@ -1380,10 +1431,10 @@
 
         if (oldWeapon) {
             showMessage(s, '🔄 替换武器！旧武器（攻击力 ' + oldWeapon.atk + '）已丢弃\n' +
-                '新武器 攻击力 ' + weaponCard.atk + '，等级 ∞（首次击杀后变为怪物HP值）');
+                '新武器 攻击力 ' + weaponCard.atk + '，等级 ∞（首次击杀后变为敌人HP值）');
         } else {
             showMessage(s, '🗡️ 装备武器！攻击力 ' + weaponCard.atk +
-                '\n等级 ∞ — 首次击杀怪物后等级将变为该怪物的HP值');
+                '\n等级 ∞ — 首次击杀敌人后等级将变为该敌人的HP值');
         }
 
         renderCards(s);
@@ -1562,7 +1613,7 @@
                         });
                         s.tweens.add({
                             targets: s.cardTypeLabels[i],
-                            x: tx, y: ty - 74,
+                            x: tx, y: ty - 68,
                             duration: 400, delay: 100,
                             ease: 'Cubic.easeInOut'
                         });
@@ -1581,7 +1632,7 @@
                     } else {
                         // New card: fly in from center
                         s.cardBgs[i].setPosition(deckX, deckY).setAlpha(0).setScale(0.5).setVisible(true);
-                        s.cardTypeLabels[i].setPosition(deckX, deckY - 74).setAlpha(0).setVisible(true);
+                        s.cardTypeLabels[i].setPosition(deckX, deckY - 68).setAlpha(0).setVisible(true);
                         s.cardValueTexts[i].setPosition(deckX, deckY + 4).setAlpha(0).setVisible(true);
                         s.cardUnitLabels[i].setPosition(deckX, deckY + 42).setAlpha(0).setVisible(true);
 
@@ -1602,7 +1653,7 @@
                         });
                     }
                     if (!isCarryOver) {
-                        s.cardTypeLabels[i].setPosition(tx, ty - 74);
+                        s.cardTypeLabels[i].setPosition(tx, ty - 68);
                         s.cardValueTexts[i].setPosition(tx, ty + 4);
                         s.cardUnitLabels[i].setPosition(tx, ty + 42);
                     }
@@ -1708,7 +1759,7 @@
             if (isCarryOver) {
                 // Carry-over card: stays in place, does a subtle "settle" pulse
                 s.cardBgs[i].setAlpha(1).setScale(0.85).setPosition(tx, ty);
-                s.cardTypeLabels[i].setAlpha(0).setPosition(tx, ty - 74);
+                s.cardTypeLabels[i].setAlpha(0).setPosition(tx, ty - 68);
                 s.cardValueTexts[i].setAlpha(0).setPosition(tx, ty + 4);
                 s.cardUnitLabels[i].setAlpha(0).setPosition(tx, ty + 42);
 
@@ -1730,7 +1781,7 @@
             } else {
                 // New card: fly from center of grid to slot
                 s.cardBgs[i].setPosition(deckX, deckY).setAlpha(0).setScale(0.5);
-                s.cardTypeLabels[i].setPosition(deckX, deckY - 74).setAlpha(0);
+                s.cardTypeLabels[i].setPosition(deckX, deckY - 68).setAlpha(0);
                 s.cardValueTexts[i].setPosition(deckX, deckY + 4).setAlpha(0);
                 s.cardUnitLabels[i].setPosition(deckX, deckY + 42).setAlpha(0);
 
@@ -1752,7 +1803,7 @@
             }
 
             // Set final text positions
-            s.cardTypeLabels[i].setPosition(tx, ty - 74);
+            s.cardTypeLabels[i].setPosition(tx, ty - 68);
             s.cardValueTexts[i].setPosition(tx, ty + 4);
             s.cardUnitLabels[i].setPosition(tx, ty + 42);
         }
@@ -1795,10 +1846,10 @@
 
         s.time.delayedCall(400, () => {
             s.endOverlay.setVisible(true);
-            s.endTitle.setText('💀 你死了').setVisible(true);
+            s.endTitle.setText('💀 你挂了').setVisible(true);
+            const deathMsg = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)];
             s.endSubtitle.setText(
-                '你倒在了第 ' + gameState.currentRoomId + ' 号房间\n' +
-                '击败了无数怪物，但地牢还是吞噬了你...'
+                '你倒在了第 ' + (gameState.completedRooms.length + 1) + ' 个房间\n' + deathMsg
             ).setVisible(true);
             s.restartBtnBg.setVisible(true);
             s.restartText.setVisible(true);
@@ -1819,10 +1870,11 @@
 
         s.time.delayedCall(400, () => {
             s.endOverlay.setVisible(true);
-            s.endTitle.setText('🏆 地牢通关！').setVisible(true);
+            s.endTitle.setText('🏆 恶棍牌通关！').setVisible(true);
+            const victoryMsg = VICTORY_MESSAGES[Math.floor(Math.random() * VICTORY_MESSAGES.length)];
             s.endSubtitle.setText(
-                '恭喜！你成功打通了全部 ' + gameState.completedRooms.length + ' 个房间\n' +
-                '剩余生命: ' + gameState.playerHP + ' / ' + gameState.maxHP
+                victoryMsg + '\n' +
+                '通过全部 ' + gameState.completedRooms.length + ' 个房间 | 剩余生命: ' + gameState.playerHP + ' / ' + gameState.maxHP
             ).setVisible(true);
             s.restartBtnBg.setVisible(true);
             s.restartText.setVisible(true);
