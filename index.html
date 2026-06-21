@@ -155,6 +155,7 @@
             playerHP: MAX_HP,
             maxHP: MAX_HP,
             weapon: null,           // { atk: number, level: number | Infinity }
+            weaponKills: 0,         // kill count for current weapon
             useWeapon: true,        // toggle: use weapon in combat?
             canSkip: true,          // can skip current room? (false after a skip)
             roomInteracted: false,
@@ -460,6 +461,14 @@
         }).setOrigin(0.5);
         s.weaponText = weaponText;
 
+        // Weapon kill count
+        const killCountText = s.add.text(340, statsY + 42, '', {
+            fontSize: '11px',
+            fill: colorToHex(THEMES.dark.textSecondary),
+            fontFamily: 'Microsoft YaHei, sans-serif'
+        }).setOrigin(0.5);
+        s.killCountText = killCountText;
+
         // ── Weapon Toggle Button ──
         const toggleW = 110;
         const toggleH = 21;
@@ -730,6 +739,7 @@
         gameState.deck = generateDeck();
         drawRoom(s);
         renderCards(s);
+        animateDealCards(s);
         redrawBackgrounds(s);
         updateUI(s);
         refreshAllTextColors(s);
@@ -889,6 +899,7 @@
 
         if (s.titleText) s.titleText.setFill(acc);
         if (s.weaponText) s.weaponText.setFill(gameState.weapon ? acc : sec);
+        if (s.killCountText) s.killCountText.setFill(sec);
         if (s.messageText) s.messageText.setFill(sec);
         if (s.roomDeckText) s.roomDeckText.setFill(sec);
         if (s.roomProgressText) s.roomProgressText.setFill(sec);
@@ -985,9 +996,12 @@
             const lvlStr = gameState.weapon.level === Infinity ? '∞' : gameState.weapon.level;
             s.weaponText.setText('攻击力:' + gameState.weapon.atk + '  LV:' + lvlStr);
             s.weaponText.setFill(colorToHex(t.textAccent));
+            s.killCountText.setText('已击杀: ' + gameState.weaponKills);
+            s.killCountText.setFill(colorToHex(t.textSecondary));
         } else {
             s.weaponText.setText('无');
             s.weaponText.setFill(colorToHex(t.textSecondary));
+            s.killCountText.setText('');
         }
         updateWeaponToggle(s);
         updateSkipButton(s);
@@ -1277,6 +1291,7 @@
 
         if (canUseWeapon) {
             weaponUsed = true;
+            gameState.weaponKills++;
             const remainingHP = monster.hp - gameState.weapon.atk;
             if (remainingHP <= 0) {
                 // Instant kill!
@@ -1354,6 +1369,7 @@
             atk: weaponCard.atk,
             level: Infinity // fresh weapon, infinite level
         };
+        gameState.weaponKills = 0;
 
         gameState.roomProcessed[index] = true;
         gameState.processedCount++;
@@ -1483,23 +1499,27 @@
         }
         gameState.canSkip = true; // re-enable skip after normal room pass
 
-        // Collect unprocessed cards to carry over to next room
+        // Collect unprocessed cards to carry over + record their old slot indices
         const carryOver = [];
+        const carryOldIndices = []; // old slot positions for animation
         for (let i = 0; i < CARDS_PER_ROOM; i++) {
             if (gameState.roomCards[i] && !gameState.roomProcessed[i]) {
                 carryOver.push(gameState.roomCards[i]);
+                carryOldIndices.push(i);
             }
         }
 
-        // Fade out old cards
+        // Fade out ONLY processed cards (carry-overs stay visible)
         const fadeTargets = [];
         for (let i = 0; i < CARDS_PER_ROOM; i++) {
-            fadeTargets.push(s.cardBgs[i]);
-            fadeTargets.push(s.cardTypeLabels[i]);
-            fadeTargets.push(s.cardValueTexts[i]);
-            fadeTargets.push(s.cardUnitLabels[i]);
-            fadeTargets.push(s.cardOverlays[i]);
-            fadeTargets.push(s.cardStatusTexts[i]);
+            if (gameState.roomProcessed[i] || !gameState.roomCards[i]) {
+                fadeTargets.push(s.cardBgs[i]);
+                fadeTargets.push(s.cardTypeLabels[i]);
+                fadeTargets.push(s.cardValueTexts[i]);
+                fadeTargets.push(s.cardUnitLabels[i]);
+                fadeTargets.push(s.cardOverlays[i]);
+                fadeTargets.push(s.cardStatusTexts[i]);
+            }
         }
 
         s.tweens.add({
@@ -1512,24 +1532,81 @@
                 drawRoom(s, carryOver);
                 renderCards(s);
 
-                // Fade in new cards
-                const fadeIn = [];
+                // Animate: carry-over cards stay visible, slide old→new; new cards fly from center
+                const deckX = CANVAS_W / 2;
+                const deckY = (CARD_Y[0] + CARD_Y[2]) / 2;
                 for (let i = 0; i < CARDS_PER_ROOM; i++) {
-                    if (gameState.roomCards[i]) {
-                        fadeIn.push(s.cardBgs[i]);
-                        fadeIn.push(s.cardTypeLabels[i]);
-                        fadeIn.push(s.cardValueTexts[i]);
-                        fadeIn.push(s.cardUnitLabels[i]);
+                    if (!gameState.roomCards[i]) continue;
+                    const tx = CARD_X[i];
+                    const ty = CARD_Y[i];
+                    const isCarryOver = i < carryOver.length;
+
+                    if (isCarryOver) {
+                        // Carry-over card: stay fully visible, slide from old to new slot
+                        const oldIdx = carryOldIndices[i];
+                        const oldX = CARD_X[oldIdx];
+                        const oldY = CARD_Y[oldIdx];
+
+                        // Place card + text at old position, fully visible
+                        s.cardBgs[i].setPosition(oldX, oldY).setAlpha(1).setScale(1).setVisible(true);
+                        s.cardTypeLabels[i].setPosition(oldX, oldY - 74).setAlpha(1).setVisible(true);
+                        s.cardValueTexts[i].setPosition(oldX, oldY + 4).setAlpha(1).setVisible(true);
+                        s.cardUnitLabels[i].setPosition(oldX, oldY + 42).setAlpha(1).setVisible(true);
+
+                        // Slide everything together to new position
+                        s.tweens.add({
+                            targets: s.cardBgs[i],
+                            x: tx, y: ty,
+                            duration: 400, delay: 100,
+                            ease: 'Cubic.easeInOut'
+                        });
+                        s.tweens.add({
+                            targets: s.cardTypeLabels[i],
+                            x: tx, y: ty - 74,
+                            duration: 400, delay: 100,
+                            ease: 'Cubic.easeInOut'
+                        });
+                        s.tweens.add({
+                            targets: s.cardValueTexts[i],
+                            x: tx, y: ty + 4,
+                            duration: 400, delay: 100,
+                            ease: 'Cubic.easeInOut'
+                        });
+                        s.tweens.add({
+                            targets: s.cardUnitLabels[i],
+                            x: tx, y: ty + 42,
+                            duration: 400, delay: 100,
+                            ease: 'Cubic.easeInOut'
+                        });
+                    } else {
+                        // New card: fly in from center
+                        s.cardBgs[i].setPosition(deckX, deckY).setAlpha(0).setScale(0.5).setVisible(true);
+                        s.cardTypeLabels[i].setPosition(deckX, deckY - 74).setAlpha(0).setVisible(true);
+                        s.cardValueTexts[i].setPosition(deckX, deckY + 4).setAlpha(0).setVisible(true);
+                        s.cardUnitLabels[i].setPosition(deckX, deckY + 42).setAlpha(0).setVisible(true);
+
+                        s.tweens.add({
+                            targets: s.cardBgs[i],
+                            x: tx, y: ty,
+                            alpha: 1,
+                            scaleX: 1, scaleY: 1,
+                            duration: 400,
+                            delay: i * 100,
+                            ease: 'Back.easeOut'
+                        });
+                        s.tweens.add({
+                            targets: [s.cardTypeLabels[i], s.cardValueTexts[i], s.cardUnitLabels[i]],
+                            alpha: 1,
+                            duration: 200,
+                            delay: i * 100 + 250
+                        });
+                    }
+                    if (!isCarryOver) {
+                        s.cardTypeLabels[i].setPosition(tx, ty - 74);
+                        s.cardValueTexts[i].setPosition(tx, ty + 4);
+                        s.cardUnitLabels[i].setPosition(tx, ty + 42);
                     }
                 }
-                // Reset alpha and fade in
-                fadeIn.forEach(obj => obj.setAlpha(0));
-                s.tweens.add({
-                    targets: fadeIn,
-                    alpha: 1,
-                    duration: 300,
-                    ease: 'Power2'
-                });
 
                 updateUI(s);
                 let enterMsg = '🚪 进入第 ' + gameState.currentRoomId +
@@ -1586,22 +1663,8 @@
                 drawRoom(s);
                 renderCards(s);
 
-                const fadeIn = [];
-                for (let i = 0; i < CARDS_PER_ROOM; i++) {
-                    if (gameState.roomCards[i]) {
-                        fadeIn.push(s.cardBgs[i]);
-                        fadeIn.push(s.cardTypeLabels[i]);
-                        fadeIn.push(s.cardValueTexts[i]);
-                        fadeIn.push(s.cardUnitLabels[i]);
-                    }
-                }
-                fadeIn.forEach(obj => obj.setAlpha(0));
-                s.tweens.add({
-                    targets: fadeIn,
-                    alpha: 1,
-                    duration: 300,
-                    ease: 'Power2'
-                });
+                // Dealing animation
+                animateDealCards(s);
 
                 updateUI(s);
                 showMessage(s, '⏭️ 跳过第 ' + gameState.currentRoomId +
@@ -1628,6 +1691,70 @@
             s.skipBg.strokeRoundedRect(423 - 46, 21 - 14, 92, 27, 8);
             s.skipText.setFill(colorToHex(t.textSkipOff));
             s.skipZone.disableInteractive();
+        }
+    }
+
+    function animateDealCards(s, carryCount) {
+        const deckX = CANVAS_W / 2;
+        const deckY = (CARD_Y[0] + CARD_Y[2]) / 2;
+        carryCount = carryCount || 0;
+
+        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+            if (!gameState.roomCards[i]) continue;
+            const tx = CARD_X[i];
+            const ty = CARD_Y[i];
+            const isCarryOver = i < carryCount;
+
+            if (isCarryOver) {
+                // Carry-over card: stays in place, does a subtle "settle" pulse
+                s.cardBgs[i].setAlpha(1).setScale(0.85).setPosition(tx, ty);
+                s.cardTypeLabels[i].setAlpha(0).setPosition(tx, ty - 74);
+                s.cardValueTexts[i].setAlpha(0).setPosition(tx, ty + 4);
+                s.cardUnitLabels[i].setAlpha(0).setPosition(tx, ty + 42);
+
+                // Pulse to full size
+                s.tweens.add({
+                    targets: s.cardBgs[i],
+                    scaleX: 1, scaleY: 1,
+                    duration: 350,
+                    delay: i * 80,
+                    ease: 'Back.easeOut'
+                });
+                // Text fades in with a warm "carried over" color flash
+                s.tweens.add({
+                    targets: [s.cardTypeLabels[i], s.cardValueTexts[i], s.cardUnitLabels[i]],
+                    alpha: 1,
+                    duration: 300,
+                    delay: i * 80 + 150
+                });
+            } else {
+                // New card: fly from center of grid to slot
+                s.cardBgs[i].setPosition(deckX, deckY).setAlpha(0).setScale(0.5);
+                s.cardTypeLabels[i].setPosition(deckX, deckY - 74).setAlpha(0);
+                s.cardValueTexts[i].setPosition(deckX, deckY + 4).setAlpha(0);
+                s.cardUnitLabels[i].setPosition(deckX, deckY + 42).setAlpha(0);
+
+                s.tweens.add({
+                    targets: s.cardBgs[i],
+                    x: tx, y: ty,
+                    alpha: 1,
+                    scaleX: 1, scaleY: 1,
+                    duration: 400,
+                    delay: i * 100,
+                    ease: 'Back.easeOut'
+                });
+                s.tweens.add({
+                    targets: [s.cardTypeLabels[i], s.cardValueTexts[i], s.cardUnitLabels[i]],
+                    alpha: 1,
+                    duration: 200,
+                    delay: i * 100 + 250
+                });
+            }
+
+            // Set final text positions
+            s.cardTypeLabels[i].setPosition(tx, ty - 74);
+            s.cardValueTexts[i].setPosition(tx, ty + 4);
+            s.cardUnitLabels[i].setPosition(tx, ty + 42);
         }
     }
 
