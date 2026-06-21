@@ -62,7 +62,7 @@
     const CARD_H = 210;
     // 2×2 grid: index 0=tl, 1=tr, 2=bl, 3=br
     const CARD_X = [133, 347, 133, 347];
-    const CARD_Y = [160, 160, 390, 390];
+    const CARD_Y = [175, 175, 405, 405];
 
     const COLORS = {
         bg:       0x12122a,
@@ -92,12 +92,26 @@
         dark: {
             bg:         0x12122a,
             headerBg:   0x1a1a3e,
-            textLight:  0xe8e8f0,
-            textDim:    0x8888aa,
-            accent:     0xf0c040,
+            // Text roles
+            textPrimary: 0xf0eee8,  // main body text (warm off-white)
+            textSecondary: 0xa8a8c0, // labels, secondary info
+            textAccent:  0xf0c040,  // gold highlights (title, weapon name)
+            textMuted:   0x7a7a99,  // muted / disabled
+            textButton:  0xf8f8ff,  // button labels
+            textOverlay: 0xffffff,  // game-over titles
+            textStatus:  0xffaa88,  // card status (defeated/equipped/used)
+            textWeaponOn:  0x6eff8e, // weapon toggle ON
+            textWeaponOff: 0xaaaaaa, // weapon toggle OFF
+            textSkipOn:  0xc0b0f0,  // skip button enabled
+            textSkipOff: 0x666688,  // skip button disabled
+            // Backgrounds / chrome
             gridColor:  0x1a1a3e,
             gridAlpha:  0.3,
             divider:    0x3a3a6a,
+            skipBgOn:   0x3a2a5a, skipBorderOn: 0x8b5cf0,
+            skipBgOff:  0x2a2a3a, skipBorderOff: 0x444466,
+            weaponToggleOffBg: 0x3a3a3a, weaponToggleOffBorder: 0x666666,
+            // Card faces
             cardMonsterBg: 0x7b1810, cardMonsterBorder: 0xc0392b,
             cardWeaponBg:  0x123a54, cardWeaponBorder:  0x2471a3,
             cardPotionBg:  0x0f4224, cardPotionBorder:  0x1e8449,
@@ -105,12 +119,26 @@
         light: {
             bg:         0xf5f0e8,
             headerBg:   0xe8e2d5,
-            textLight:  0x333344,
-            textDim:    0x778899,
-            accent:     0xb08000,
+            // Text roles
+            textPrimary: 0x2a2a38,  // dark charcoal
+            textSecondary: 0x5a5a70, // medium gray labels
+            textAccent:  0xa07000,  // dark amber
+            textMuted:   0x8a8a99,  // muted
+            textButton:  0x2a2a38,  // button labels (dark on light bg)
+            textOverlay: 0xf0eee8,  // game-over titles (light on dark overlay)
+            textStatus:  0xcc5544,  // card status
+            textWeaponOn:  0xc0ffc0, // weapon toggle ON (light green on dark bg)
+            textWeaponOff: 0x444444, // weapon toggle OFF (dark on light bg)
+            textSkipOn:  0x402880,  // skip button enabled
+            textSkipOff: 0x999999,  // skip button disabled
+            // Backgrounds / chrome
             gridColor:  0xd8d0c0,
             gridAlpha:  0.4,
             divider:    0xc8c0b0,
+            skipBgOn:   0xb8a8d8, skipBorderOn: 0x6040b0,
+            skipBgOff:  0xd8d8d8, skipBorderOff: 0xbbbbbb,
+            weaponToggleOffBg: 0xd0d0d0, weaponToggleOffBorder: 0xaaaaaa,
+            // Card faces
             cardMonsterBg: 0xe0c8c4, cardMonsterBorder: 0xa03028,
             cardWeaponBg:  0xc8d4e4, cardWeaponBorder:  0x1e6090,
             cardPotionBg:  0xc4e0d0, cardPotionBorder:  0x186838,
@@ -129,10 +157,13 @@
             weapon: null,           // { atk: number, level: number | Infinity }
             useWeapon: true,        // toggle: use weapon in combat?
             canSkip: true,          // can skip current room? (false after a skip)
+            roomInteracted: false,
+            currentRoomId: 0,       // room id tied to current 4 cards
+            nextRoomId: 1,          // next room id to assign to new cards
+            completedRooms: [],     // list of room ids that have been passed
             deck: [],               // remaining cards
             roomCards: [],          // 4 current room cards
             roomProcessed: [],      // boolean[4]
-            roomNumber: 1,
             processedCount: 0,
             gameOver: false,
             gameWon: false,
@@ -149,7 +180,7 @@
             deck.push({ type: 'monster', hp: hp });
             deck.push({ type: 'monster', hp: hp });
         }
-        // 10 weapons: ATK 1–10, one each
+        // 10 weapons: 攻击力 1–10, one each
         for (let atk = 1; atk <= 10; atk++) {
             deck.push({ type: 'weapon', atk: atk });
         }
@@ -243,13 +274,20 @@
         drawCardFace(g, THEMES.light.cardPotionBg, THEMES.light.cardPotionBorder);
         drawPotionIcon(); g.generateTexture('card_potion_l', CARD_W, CARD_H);
 
-        // --- Button texture ---
+        // --- Button textures (dark + light) ---
         g.clear();
         g.fillStyle(COLORS.buttonBg, 1);
         g.fillRoundedRect(0, 0, 194, 46, 11);
         g.lineStyle(2, 0xa080e0, 1);
         g.strokeRoundedRect(0, 0, 194, 46, 11);
-        g.generateTexture('btn_pass', 194, 46);
+        g.generateTexture('btn_pass_d', 194, 46);
+
+        g.clear();
+        g.fillStyle(0xd8d0e8, 1);
+        g.fillRoundedRect(0, 0, 194, 46, 11);
+        g.lineStyle(2, 0x7050b0, 1);
+        g.strokeRoundedRect(0, 0, 194, 46, 11);
+        g.generateTexture('btn_pass_l', 194, 46);
 
         g.destroy();
     }
@@ -296,7 +334,7 @@
         // ── Title (top) ──
         const titleText = s.add.text(CANVAS_W / 2, 21, '⚔️ 地牢探险', {
             fontSize: '18px',
-            fill: '#f0c040',
+            fill: colorToHex(THEMES.dark.textAccent),
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
         }).setOrigin(0.5);
@@ -319,7 +357,7 @@
 
         const skipText = s.add.text(skipX, skipY, '⏭️ 跳过', {
             fontSize: '11px',
-            fill: '#cccce0',
+            fill: colorToHex(THEMES.dark.textSkipOn),
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
         }).setOrigin(0.5);
@@ -358,6 +396,14 @@
         themeZone.on('pointerdown', () => toggleTheme(s));
         s.themeZone = themeZone;
 
+        // ── Room Progress (above card area, centered) ──
+        const roomProgressText = s.add.text(CANVAS_W / 2, 58, '', {
+            fontSize: '13px',
+            fill: colorToHex(THEMES.dark.textSecondary),
+            fontFamily: 'Microsoft YaHei, sans-serif'
+        }).setOrigin(0.5);
+        s.roomProgressText = roomProgressText;
+
         // ═══════════════════════════════════════════════════
         //  BOTTOM STATS BAR (all player info moved here)
         // ═══════════════════════════════════════════════════
@@ -376,7 +422,7 @@
         // ── HP Display (left) ──
         s.add.text(48, statsY + 15, '❤️', {
             fontSize: '14px',
-            fill: '#cccce0',
+            fill: colorToHex(THEMES.dark.textSecondary),
             fontFamily: 'Microsoft YaHei, sans-serif'
         }).setOrigin(0.5);
 
@@ -403,13 +449,13 @@
         // ── Weapon Display (center) ──
         s.add.text(260, statsY + 15, '🗡️ 武器', {
             fontSize: '11px',
-            fill: '#cccce0',
+            fill: colorToHex(THEMES.dark.textSecondary),
             fontFamily: 'Microsoft YaHei, sans-serif'
         }).setOrigin(0.5);
 
         const weaponText = s.add.text(260, statsY + 32, '无', {
             fontSize: '13px',
-            fill: '#8888aa',
+            fill: colorToHex(THEMES.dark.textSecondary),
             fontFamily: 'Microsoft YaHei, sans-serif'
         }).setOrigin(0.5);
         s.weaponText = weaponText;
@@ -425,7 +471,7 @@
 
         const toggleText = s.add.text(toggleX, toggleY, '', {
             fontSize: '10px',
-            fill: '#ffffff',
+            fill: colorToHex(THEMES.dark.textWeaponOn),
             fontFamily: 'Microsoft YaHei, sans-serif'
         }).setOrigin(0.5);
         s.weaponToggleText = toggleText;
@@ -436,6 +482,10 @@
             if (gameState.gameOver || gameState.gameWon) return;
             gameState.useWeapon = !gameState.useWeapon;
             updateWeaponToggle(s);
+            // If a monster is selected, refresh its action button
+            if (s.selectedCardIndex >= 0) {
+                refreshActionButton(s);
+            }
             if (gameState.useWeapon) {
                 showMessage(s, '⚔️ 武器已启用');
             } else {
@@ -453,7 +503,7 @@
         // ── Room / Deck Display (right) ──
         const roomDeckText = s.add.text(405, statsY + 20, '', {
             fontSize: '11px',
-            fill: '#aaaacc',
+            fill: colorToHex(THEMES.dark.textSecondary),
             fontFamily: 'Microsoft YaHei, sans-serif',
             align: 'center',
             lineSpacing: 3
@@ -580,7 +630,7 @@
 
         const messageText = s.add.text(CANVAS_W / 2, 601, '选择卡牌开始行动吧！\n打怪物、装备武器或使用血瓶', {
             fontSize: '13px',
-            fill: '#aaaacc',
+            fill: colorToHex(THEMES.dark.textSecondary),
             fontFamily: 'Microsoft YaHei, sans-serif',
             align: 'center',
             lineSpacing: 3
@@ -589,10 +639,11 @@
 
         // ── Next Room Button ──
         const btnContainer = s.add.container(CANVAS_W / 2, 745);
-        const btnBg = s.add.image(0, 0, 'btn_pass');
+        const btnBg = s.add.image(0, 0, 'btn_pass_d');
+        s.nextRoomBtnBgImg = btnBg;
         const btnText = s.add.text(0, 0, '▶ 进入下一房间', {
             fontSize: '14px',
-            fill: '#ffffff',
+            fill: colorToHex(THEMES.dark.textButton),
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
         }).setOrigin(0.5);
@@ -624,7 +675,7 @@
 
         const endTitle = s.add.text(CANVAS_W / 2, 286, '', {
             fontSize: '44px',
-            fill: '#ffffff',
+            fill: colorToHex(THEMES.dark.textOverlay),
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
         }).setOrigin(0.5).setDepth(101).setVisible(false);
@@ -632,7 +683,7 @@
 
         const endSubtitle = s.add.text(CANVAS_W / 2, 366, '', {
             fontSize: '16px',
-            fill: '#cccce0',
+            fill: colorToHex(THEMES.dark.textSecondary),
             fontFamily: 'Microsoft YaHei, sans-serif',
             align: 'center'
         }).setOrigin(0.5).setDepth(101).setVisible(false);
@@ -648,7 +699,7 @@
 
         const restartText = s.add.text(CANVAS_W / 2, 448, '🔄 再来一局', {
             fontSize: '16px',
-            fill: '#ffffff',
+            fill: colorToHex(THEMES.dark.textButton),
             fontFamily: 'Microsoft YaHei, sans-serif',
             fontStyle: 'bold'
         }).setOrigin(0.5).setDepth(101).setVisible(false);
@@ -679,7 +730,9 @@
         gameState.deck = generateDeck();
         drawRoom(s);
         renderCards(s);
+        redrawBackgrounds(s);
         updateUI(s);
+        refreshAllTextColors(s);
 
         // Welcome animation
         showMessage(s, '⚔️ 欢迎来到地牢！共有 ' + DECK_TOTAL + ' 张牌，' +
@@ -719,23 +772,23 @@
 
             // Theme-aware text colors
             const t = THEMES[s.theme];
-            const txtLight = '#' + t.textLight.toString(16).padStart(6, '0');
-            const txtDim = '#' + t.textDim.toString(16).padStart(6, '0');
+            const txtPri = colorToHex(t.textPrimary);
+            const txtSec = colorToHex(t.textSecondary);
 
             // Type label
             const typeStr = card.type === 'monster' ? '👹 怪物' :
                             card.type === 'weapon' ? '⚔️ 武器' : '🧪 血瓶';
-            typeLabel.setText(typeStr).setVisible(true).setAlpha(1).setFill(txtDim);
+            typeLabel.setText(typeStr).setVisible(true).setAlpha(1).setFill(txtSec);
 
             // Value
             const val = card.type === 'monster' ? card.hp :
                         card.type === 'weapon' ? card.atk : card.heal;
-            valueText.setText(String(val)).setVisible(true).setAlpha(1).setFill(txtLight);
+            valueText.setText(String(val)).setVisible(true).setAlpha(1).setFill(txtPri);
 
             // Unit label
             const unitStr = card.type === 'monster' ? 'HP' :
-                            card.type === 'weapon' ? 'ATK' : '恢复';
-            unitLabel.setText(unitStr).setVisible(true).setAlpha(1).setFill(txtDim);
+                            card.type === 'weapon' ? '攻击力' : '恢复';
+            unitLabel.setText(unitStr).setVisible(true).setAlpha(1).setFill(txtSec);
 
             // Processed state
             if (processed) {
@@ -743,7 +796,7 @@
                 s.cardOverlays[i].setVisible(true).setAlpha(1);
                 const statusStr = card.type === 'monster' ? '☠️ 已击败' :
                                   card.type === 'weapon' ? '✅ 已装备' : '✅ 已使用';
-                s.cardStatusTexts[i].setText(statusStr).setVisible(true).setAlpha(1).setFill('#ff8888');
+                s.cardStatusTexts[i].setText(statusStr).setVisible(true).setAlpha(1).setFill(colorToHex(t.textStatus));
                 bg.disableInteractive();
             } else {
                 bg.clearTint();
@@ -764,25 +817,31 @@
     // ═══════════════════════════════════════════════════════════════
     function toggleTheme(s) {
         s.theme = (s.theme === 'dark') ? 'light' : 'dark';
-        applyTheme(s);
+        // Re-render everything with new theme
         renderCards(s);
+        // Redraw all backgrounds
+        redrawBackgrounds(s);
+        // Update UI (which also updates text colors)
         updateUI(s);
     }
 
-    function applyTheme(s) {
-        const t = THEMES[s.theme];
-        const isDark = s.theme === 'dark';
+    function redrawBackgrounds(s) {
+        var t = THEMES[s.theme];
 
-        // Canvas background
-        s.cameras.main.setBackgroundColor(t.bg);
+        // Full-screen solid background (most reliable method)
+        if (!s.solidBg) {
+            s.solidBg = s.add.rectangle(CANVAS_W / 2, CANVAS_H / 2, CANVAS_W, CANVAS_H, t.bg).setDepth(-1);
+        } else {
+            s.solidBg.setFillStyle(t.bg);
+        }
 
-        // Grid pattern
+        // Grid pattern overlay
         s.bgGfx.clear();
         s.bgGfx.fillStyle(t.gridColor, t.gridAlpha);
-        for (let x = 0; x < CANVAS_W; x += 60) {
+        for (var x = 0; x < CANVAS_W; x += 60) {
             s.bgGfx.fillRect(x, 0, 1, CANVAS_H);
         }
-        for (let y = 0; y < CANVAS_H; y += 60) {
+        for (var y = 0; y < CANVAS_H; y += 60) {
             s.bgGfx.fillRect(0, y, CANVAS_W, 1);
         }
 
@@ -805,31 +864,49 @@
         s.topLineGfx.lineStyle(1, t.divider, 0.4);
         s.topLineGfx.lineBetween(15, 41, CANVAS_W - 15, 41);
 
-        // Update known UI text colors
-        const txtLight = '#' + t.textLight.toString(16).padStart(6, '0');
-        const txtDim = '#' + t.textDim.toString(16).padStart(6, '0');
-        const txtAccent = '#' + t.accent.toString(16).padStart(6, '0');
-
-        if (s.titleText) s.titleText.setFill(txtAccent);
-        if (s.hpText) s.hpText.setFill(txtLight);
-        if (s.weaponText) s.weaponText.setFill(gameState.weapon ? txtAccent : txtDim);
-        if (s.messageText) s.messageText.setFill(txtDim);
-        if (s.roomDeckText) s.roomDeckText.setFill(txtDim);
-        if (s.skipText) s.skipText.setFill(isDark ? '#cccce0' : '#555566');
-
-        // Theme button
-        s.themeBtnText.setText(isDark ? '🌙' : '☀️');
+        // Theme button background
         s.themeBg.clear();
         s.themeBg.fillStyle(t.headerBg, 0.8);
         s.themeBg.fillRoundedRect(57 - 22, 21 - 14, 44, 27, 7);
 
-        // Button tint for next room
-        if (s.nextRoomBtnBg) {
-            s.nextRoomBtnBg.setTint(isDark ? 0xffffff : 0xcccccc);
-        }
+        // Theme button icon
+        s.themeBtnText.setText(s.theme === 'dark' ? '🌙' : '☀️');
 
-        showMessage(s, isDark ? '🌙 已切换至暗色主题' : '☀️ 已切换至亮色主题');
+        // Next room button — swap texture
+        if (s.nextRoomBtnBg) {
+            s.nextRoomBtnBg.setTexture('btn_pass_' + (s.theme === 'dark' ? 'd' : 'l'));
+        }
     }
+
+    function colorToHex(c) {
+        return '#' + c.toString(16).padStart(6, '0');
+    }
+
+    function refreshAllTextColors(s) {
+        var t = THEMES[s.theme];
+        var sec = colorToHex(t.textSecondary);
+        var acc = colorToHex(t.textAccent);
+
+        if (s.titleText) s.titleText.setFill(acc);
+        if (s.weaponText) s.weaponText.setFill(gameState.weapon ? acc : sec);
+        if (s.messageText) s.messageText.setFill(sec);
+        if (s.roomDeckText) s.roomDeckText.setFill(sec);
+        if (s.roomProgressText) s.roomProgressText.setFill(sec);
+        if (s.endTitle) s.endTitle.setFill(colorToHex(t.textOverlay));
+        if (s.endSubtitle) s.endSubtitle.setFill(sec);
+        if (s.restartText) s.restartText.setFill(colorToHex(t.textButton));
+        if (s.nextRoomBtn) {
+            try {
+                var children = s.nextRoomBtn.getAll ? s.nextRoomBtn.getAll() : s.nextRoomBtn.list || [];
+                for (var i = 0; i < children.length; i++) {
+                    if (children[i] && children[i].type === 'Text') {
+                        children[i].setFill(colorToHex(t.textButton));
+                    }
+                }
+            } catch (e) { /* ignore */ }
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════
     function updateWeaponToggle(s) {
         const toggleBg = s.weaponToggleBg;
@@ -854,20 +931,19 @@
         const isOn = gameState.useWeapon;
         toggleBg.clear();
 
+        const t = THEMES[s.theme];
         if (isOn) {
-            // Green — weapon enabled
             toggleBg.fillStyle(0x1a5a2a, 0.9);
             toggleBg.fillRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
             toggleBg.lineStyle(1, 0x2ecc71, 0.7);
             toggleBg.strokeRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
-            toggleText.setText('⚔️ 使用武器').setFill('#4eff8e');
+            toggleText.setText('⚔️ 使用武器').setFill(colorToHex(t.textWeaponOn));
         } else {
-            // Gray — weapon disabled (lighter in light theme)
-            toggleBg.fillStyle(s.theme === 'dark' ? 0x3a3a3a : 0xd8d8d8, 0.8);
+            toggleBg.fillStyle(t.weaponToggleOffBg, 0.8);
             toggleBg.fillRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
-            toggleBg.lineStyle(1, s.theme === 'dark' ? 0x666666 : 0xaaaaaa, 0.5);
+            toggleBg.lineStyle(1, t.weaponToggleOffBorder, 0.5);
             toggleBg.strokeRoundedRect(toggleX - toggleW / 2, toggleY - toggleH / 2, toggleW, toggleH, 6);
-            toggleText.setText('🔒 不用武器').setFill(s.theme === 'dark' ? '#aaaaaa' : '#666666');
+            toggleText.setText('🔒 不用武器').setFill(colorToHex(t.textWeaponOff));
         }
     }
 
@@ -880,9 +956,14 @@
         const hpColor = gameState.playerHP > 12 ? COLORS.hpGreen :
                         gameState.playerHP > 5  ? COLORS.hpYellow : COLORS.hpRed;
         s.hpText.setFill('#' + hpColor.toString(16).padStart(6, '0'));
-        // Also update the ❤️ label and message/roomdeck text for theme consistency
-        s.messageText.setFill('#' + THEMES[s.theme].textDim.toString(16).padStart(6, '0'));
-        s.roomDeckText.setFill('#' + THEMES[s.theme].textDim.toString(16).padStart(6, '0'));
+        // Room progress (above cards)
+        const totalRooms = Math.ceil(DECK_TOTAL / CARDS_PER_ROOM);
+        s.roomProgressText.setText('第 ' + gameState.currentRoomId + ' 号房间  已通过: ' + gameState.completedRooms.length + ' / ' + totalRooms);
+        s.roomProgressText.setFill(colorToHex(THEMES[s.theme].textSecondary));
+
+        // Theme-consistent secondary text
+        s.messageText.setFill(colorToHex(THEMES[s.theme].textSecondary));
+        s.roomDeckText.setFill(colorToHex(THEMES[s.theme].textSecondary));
 
         // HP bar
         const hpRatio = Math.max(0, gameState.playerHP / gameState.maxHP);
@@ -902,19 +983,20 @@
         const t = THEMES[s.theme];
         if (gameState.weapon) {
             const lvlStr = gameState.weapon.level === Infinity ? '∞' : gameState.weapon.level;
-            s.weaponText.setText('ATK:' + gameState.weapon.atk + '  LV:' + lvlStr);
-            s.weaponText.setFill('#' + t.accent.toString(16).padStart(6, '0'));
+            s.weaponText.setText('攻击力:' + gameState.weapon.atk + '  LV:' + lvlStr);
+            s.weaponText.setFill(colorToHex(t.textAccent));
         } else {
             s.weaponText.setText('无');
-            s.weaponText.setFill('#' + t.textDim.toString(16).padStart(6, '0'));
+            s.weaponText.setFill(colorToHex(t.textSecondary));
         }
         updateWeaponToggle(s);
         updateSkipButton(s);
+        refreshAllTextColors(s);
 
         // Room / Deck
         const roomsTotal = Math.ceil(DECK_TOTAL / CARDS_PER_ROOM);
         s.roomDeckText.setText(
-            '🏠 房间: ' + gameState.roomNumber + ' / ' + roomsTotal + '\n🃏 剩余: ' + gameState.deck.length + ' 张'
+            '✅ 已通过: ' + gameState.completedRooms.length + ' / ' + roomsTotal + '\n🃏 剩余: ' + gameState.deck.length + ' 张'
         );
 
         // Next Room button
@@ -1071,11 +1153,11 @@
             s.actionBtnBg.lineStyle(2, 0x3498db, 0.9);
             s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
             if (oldAtk !== null) {
-                s.actionBtnText.setText('🔄 替换(ATK ' + oldAtk + ' → ' + card.atk + ')').setFill('#6eb8f0');
-                showMessage(s, '新武器 ATK ' + card.atk + '，将替换当前武器（ATK ' + oldAtk + '）');
+                s.actionBtnText.setText('🔄 替换(攻击力 ' + oldAtk + ' → ' + card.atk + ')').setFill('#6eb8f0');
+                showMessage(s, '新武器 攻击力 ' + card.atk + '，将替换当前武器（攻击力 ' + oldAtk + '）');
             } else {
                 s.actionBtnText.setText('🗡️ 装备').setFill('#6eb8f0');
-                showMessage(s, '装备武器 ATK ' + card.atk + ' — 点击按钮确认');
+                showMessage(s, '装备武器 攻击力 ' + card.atk + ' — 点击按钮确认');
             }
         } else if (card.type === 'potion') {
             const actualHeal = Math.min(card.heal, gameState.maxHP - gameState.playerHP);
@@ -1097,6 +1179,62 @@
         // Position and show text + zone
         s.actionBtnText.setPosition(btnX, btnY).setVisible(true);
         s.actionBtnZone.setPosition(btnX, btnY).setVisible(true);
+    }
+
+    function refreshActionButton(s) {
+        // Redraw the action button for the currently selected card (no card movement)
+        if (s.selectedCardIndex < 0) return;
+        const index = s.selectedCardIndex;
+        const card = gameState.roomCards[index];
+        if (!card) return;
+        const cx = CARD_X[index];
+        const cy = CARD_Y[index];
+        const btnW = 152;
+        const btnH = 34;
+        const btnY = cy + 102;
+        const btnX = cx;
+
+        s.actionBtnBg.clear();
+        s.actionBtnBg.setPosition(btnX - btnW / 2, btnY - btnH / 2);
+
+        if (card.type === 'monster') {
+            const preview = getCombatPreview(card);
+            if (preview.instantKill) {
+                s.actionBtnBg.fillStyle(0x2a6a1a, 0.95);
+                s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnBg.lineStyle(2, 0x4ecc2e, 0.9);
+                s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnText.setText('⚡ 斩杀').setFill('#6eff4e');
+            } else {
+                s.actionBtnBg.fillStyle(0x6a2020, 0.95);
+                s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnBg.lineStyle(2, 0xcc3333, 0.9);
+                s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
+                s.actionBtnText.setText('⚔️ 击杀(消耗' + preview.damageToPlayer + '点生命)').setFill('#ff6666');
+            }
+        } else if (card.type === 'weapon') {
+            const oldAtk = gameState.weapon ? gameState.weapon.atk : null;
+            s.actionBtnBg.fillStyle(0x123a54, 0.95);
+            s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
+            s.actionBtnBg.lineStyle(2, 0x3498db, 0.9);
+            s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
+            if (oldAtk !== null) {
+                s.actionBtnText.setText('🔄 替换(攻击力 ' + oldAtk + ' → ' + card.atk + ')').setFill('#6eb8f0');
+            } else {
+                s.actionBtnText.setText('🗡️ 装备').setFill('#6eb8f0');
+            }
+        } else if (card.type === 'potion') {
+            const actualHeal = Math.min(card.heal, gameState.maxHP - gameState.playerHP);
+            s.actionBtnBg.fillStyle(0x0f4224, 0.95);
+            s.actionBtnBg.fillRoundedRect(0, 0, btnW, btnH, 8);
+            s.actionBtnBg.lineStyle(2, 0x2ecc71, 0.9);
+            s.actionBtnBg.strokeRoundedRect(0, 0, btnW, btnH, 8);
+            if (actualHeal <= 0) {
+                s.actionBtnText.setText('🧪 已达上限(HP已满)').setFill('#88cc88');
+            } else {
+                s.actionBtnText.setText('🧪 使用(恢复' + actualHeal + '点生命)').setFill('#6eff8e');
+            }
+        }
     }
 
     function deselectCard(s) {
@@ -1143,7 +1281,7 @@
             if (remainingHP <= 0) {
                 // Instant kill!
                 damageToPlayer = 0;
-                showMessage(s, '⚡ 武器攻击！ATK ' + gameState.weapon.atk +
+                showMessage(s, '⚡ 武器攻击！攻击力 ' + gameState.weapon.atk +
                     ' vs 怪物 HP ' + originalHP + ' → 秒杀！\n无伤击败怪物！（武器等级降为 ' + originalHP + '）');
             } else {
                 // Weapon reduces HP, player takes rest
@@ -1178,6 +1316,7 @@
         // Mark defeated
         gameState.roomProcessed[index] = true;
         gameState.processedCount++;
+        gameState.roomInteracted = true;
 
         // Deselect card and hide action button
         deselectCard(s);
@@ -1218,15 +1357,16 @@
 
         gameState.roomProcessed[index] = true;
         gameState.processedCount++;
+        gameState.roomInteracted = true;
 
         // Deselect and hide action button
         deselectCard(s);
 
         if (oldWeapon) {
-            showMessage(s, '🔄 替换武器！旧武器（ATK ' + oldWeapon.atk + '）已丢弃\n' +
-                '新武器 ATK ' + weaponCard.atk + '，等级 ∞（首次击杀后变为怪物HP值）');
+            showMessage(s, '🔄 替换武器！旧武器（攻击力 ' + oldWeapon.atk + '）已丢弃\n' +
+                '新武器 攻击力 ' + weaponCard.atk + '，等级 ∞（首次击杀后变为怪物HP值）');
         } else {
-            showMessage(s, '🗡️ 装备武器！ATK ' + weaponCard.atk +
+            showMessage(s, '🗡️ 装备武器！攻击力 ' + weaponCard.atk +
                 '\n等级 ∞ — 首次击杀怪物后等级将变为该怪物的HP值');
         }
 
@@ -1247,6 +1387,7 @@
         gameState.playerHP = Math.min(gameState.maxHP, gameState.playerHP + healAmount);
         gameState.roomProcessed[index] = true;
         gameState.processedCount++;
+        gameState.roomInteracted = true;
 
         // Deselect and hide action button
         deselectCard(s);
@@ -1278,15 +1419,39 @@
         gameState.roomCards = [];
         gameState.roomProcessed = [];
         gameState.processedCount = 0;
+        gameState.roomInteracted = false;
 
+        // Draw 4 cards
         for (let i = 0; i < CARDS_PER_ROOM; i++) {
             if (gameState.deck.length > 0) {
                 gameState.roomCards.push(gameState.deck.shift());
                 gameState.roomProcessed.push(false);
             } else {
                 gameState.roomCards.push(null);
-                gameState.roomProcessed.push(true); // mark empty slots as "processed"
+                gameState.roomProcessed.push(true);
             }
+        }
+
+        // Determine room ID: use existing roomId from any card, or assign new
+        let existingId = 0;
+        for (let i = 0; i < CARDS_PER_ROOM; i++) {
+            if (gameState.roomCards[i] && gameState.roomCards[i].roomId) {
+                existingId = gameState.roomCards[i].roomId;
+                break;
+            }
+        }
+
+        if (existingId > 0) {
+            gameState.currentRoomId = existingId;
+        } else {
+            gameState.currentRoomId = gameState.nextRoomId;
+            // Stamp roomId on all non-null cards
+            for (let i = 0; i < CARDS_PER_ROOM; i++) {
+                if (gameState.roomCards[i]) {
+                    gameState.roomCards[i].roomId = gameState.nextRoomId;
+                }
+            }
+            gameState.nextRoomId++;
         }
     }
 
@@ -1302,7 +1467,10 @@
             return;
         }
 
-        gameState.roomNumber++;
+        // Mark current room as completed
+        if (gameState.completedRooms.indexOf(gameState.currentRoomId) < 0) {
+            gameState.completedRooms.push(gameState.currentRoomId);
+        }
         gameState.canSkip = true; // re-enable skip after normal room pass
 
         // Fade out old cards
@@ -1346,8 +1514,8 @@
                 });
 
                 updateUI(s);
-                showMessage(s, '🚪 进入房间 ' + gameState.roomNumber +
-                    ' | 剩余牌堆: ' + gameState.deck.length + ' 张');
+                showMessage(s, '🚪 进入第 ' + gameState.currentRoomId +
+                    ' 号房间 | 剩余牌堆: ' + gameState.deck.length + ' 张');
             }
         });
     }
@@ -1358,6 +1526,10 @@
             return;
         }
         if (gameState.gameOver || gameState.gameWon) return;
+        if (gameState.roomInteracted) {
+            showMessage(s, '⛔ 本房间已进行过操作，无法跳过！');
+            return;
+        }
 
         // Deselect any selected card
         deselectCard(s);
@@ -1371,7 +1543,6 @@
 
         // Disable skip for next room
         gameState.canSkip = false;
-        gameState.roomNumber++;
 
         // Fade out old cards
         const fadeTargets = [];
@@ -1411,30 +1582,29 @@
                 });
 
                 updateUI(s);
-                showMessage(s, '⏭️ 跳过房间 ' + (gameState.roomNumber - 1) +
-                    ' | 进入房间 ' + gameState.roomNumber +
-                    ' | 剩余牌堆: ' + gameState.deck.length + ' 张\n（原房间卡牌已放回牌堆底部）');
+                showMessage(s, '⏭️ 跳过第 ' + gameState.currentRoomId +
+                    ' 号房间 | 剩余牌堆: ' + gameState.deck.length + ' 张\n（原房间卡牌已放回牌堆底部）');
             }
         });
     }
 
     function updateSkipButton(s) {
-        const isDark = s.theme === 'dark';
-        const canUse = gameState.canSkip && !gameState.gameOver && !gameState.gameWon;
+        const t = THEMES[s.theme];
+        const canUse = gameState.canSkip && !gameState.roomInteracted && !gameState.gameOver && !gameState.gameWon;
         s.skipBg.clear();
         if (canUse) {
-            s.skipBg.fillStyle(isDark ? 0x3a2a5a : 0xb8a8d8, 0.9);
+            s.skipBg.fillStyle(t.skipBgOn, 0.9);
             s.skipBg.fillRoundedRect(423 - 46, 21 - 14, 92, 27, 8);
-            s.skipBg.lineStyle(1, isDark ? 0x8b5cf0 : 0x6040b0, 0.7);
+            s.skipBg.lineStyle(1, t.skipBorderOn, 0.7);
             s.skipBg.strokeRoundedRect(423 - 46, 21 - 14, 92, 27, 8);
-            s.skipText.setFill(isDark ? '#c0b0f0' : '#402880');
+            s.skipText.setFill(colorToHex(t.textSkipOn));
             s.skipZone.setInteractive({ useHandCursor: true });
         } else {
-            s.skipBg.fillStyle(isDark ? 0x2a2a3a : 0xd0d0d0, 0.6);
+            s.skipBg.fillStyle(t.skipBgOff, 0.6);
             s.skipBg.fillRoundedRect(423 - 46, 21 - 14, 92, 27, 8);
-            s.skipBg.lineStyle(1, isDark ? 0x444466 : 0xaaaaaa, 0.3);
+            s.skipBg.lineStyle(1, t.skipBorderOff, 0.3);
             s.skipBg.strokeRoundedRect(423 - 46, 21 - 14, 92, 27, 8);
-            s.skipText.setFill(isDark ? '#666688' : '#888899');
+            s.skipText.setFill(colorToHex(t.textSkipOff));
             s.skipZone.disableInteractive();
         }
     }
@@ -1478,7 +1648,7 @@
             s.endOverlay.setVisible(true);
             s.endTitle.setText('💀 你死了').setVisible(true);
             s.endSubtitle.setText(
-                '你倒在了第 ' + gameState.roomNumber + ' 个房间\n' +
+                '你倒在了第 ' + gameState.currentRoomId + ' 号房间\n' +
                 '击败了无数怪物，但地牢还是吞噬了你...'
             ).setVisible(true);
             s.restartBtnBg.setVisible(true);
@@ -1502,7 +1672,7 @@
             s.endOverlay.setVisible(true);
             s.endTitle.setText('🏆 地牢通关！').setVisible(true);
             s.endSubtitle.setText(
-                '恭喜！你成功打通了所有 ' + gameState.roomNumber + ' 个房间\n' +
+                '恭喜！你成功打通了全部 ' + gameState.completedRooms.length + ' 个房间\n' +
                 '剩余生命: ' + gameState.playerHP + ' / ' + gameState.maxHP
             ).setVisible(true);
             s.restartBtnBg.setVisible(true);
