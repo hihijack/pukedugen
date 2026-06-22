@@ -512,6 +512,7 @@
         s.cardOverlays = [];
         s.cardStatusTexts = [];
         s.cardContainers = []; // for hover logic
+        s.combatPreviewTexts = [];
 
         for (let i = 0; i < CARDS_PER_ROOM; i++) {
             const cx = CARD_X[i];
@@ -555,6 +556,15 @@
                 fontFamily: 'Microsoft YaHei, sans-serif',
             }).setOrigin(0.5).setVisible(false);
             s.cardUnitLabels.push(unitLabel);
+
+            // Combat preview text (below bottom line, monsters only)
+            const combatPreview = s.add.text(cx, cy + 67, '', {
+                fontSize: '12px',
+                fill: '#cccccc',
+                fontFamily: 'Microsoft YaHei, sans-serif',
+                fontStyle: 'bold'
+            }).setOrigin(0.5).setVisible(false);
+            s.combatPreviewTexts.push(combatPreview);
 
             // Dark overlay (for processed cards)
             const overlay = s.add.rectangle(cx, cy, CARD_W - 6, CARD_H - 6, COLORS.overlay, 0.55)
@@ -760,6 +770,7 @@
                 typeLabel.setVisible(false);
                 valueText.setVisible(false);
                 unitLabel.setVisible(false);
+                s.combatPreviewTexts[i].setVisible(false);
                 s.cardOverlays[i].setVisible(false);
                 s.cardStatusTexts[i].setVisible(false);
                 if (s.slotGfxs[i]) s.slotGfxs[i].setVisible(false);
@@ -789,26 +800,29 @@
             const valColor = card.type === 'monster' ? (s.theme === 'dark' ? '#c8a090' : '#5a2028') : txtPri;
             valueText.setText(String(val)).setVisible(true).setAlpha(1).setFill(valColor);
 
-            // Weapon effectiveness stroke on monster HP
-            if (card.type === 'monster' && !processed) {
-                const hasWeapon = gameState.weapon && gameState.useWeapon;
-                if (hasWeapon && gameState.weapon.level >= card.hp) {
-                    if (gameState.weapon.atk >= card.hp) {
-                        valueText.setStroke('#ff8800', 3);  // Orange: instant kill
-                    } else {
-                        valueText.setStroke('#ffcc00', 3);  // Yellow: weapon effective
-                    }
-                } else {
-                    valueText.setStroke('#ff4444', 3);  // Red: no weapon / disabled / level insufficient
-                }
-            } else {
-                valueText.setStroke('', 0);
-            }
-
             // Unit label
             const unitStr = card.type === 'monster' ? 'HP' :
                             card.type === 'weapon' ? '攻击力' : '恢复';
             unitLabel.setText(unitStr).setVisible(true).setAlpha(1).setFill(txtSec);
+
+            // Combat preview for monsters (below bottom line)
+            const cpText = s.combatPreviewTexts[i];
+            if (card.type === 'monster' && !processed) {
+                const hasWeapon = gameState.weapon && gameState.useWeapon;
+                cpText.setVisible(true);
+                if (hasWeapon && gameState.weapon.level >= card.hp) {
+                    if (gameState.weapon.atk >= card.hp) {
+                        cpText.setText('🗡️').setFill('#ffaa33');  // instant kill
+                    } else {
+                        const dmg = card.hp - gameState.weapon.atk;
+                        cpText.setText('🗡️HP-' + dmg).setFill('#ffcc44');  // weapon effective
+                    }
+                } else {
+                    cpText.setText('HP-' + card.hp).setFill('#ff6666');  // no weapon / ineffective
+                }
+            } else {
+                cpText.setVisible(false);
+            }
 
             // Processed state
             if (processed) {
@@ -1122,12 +1136,13 @@
         const card = gameState.roomCards[index];
 
         // Move card up (absolute targets)
-        const offsets = [0, -68, 4, 42, 0, 68]; // bg, typeLabel, valueText, unitLabel, overlay, statusText
+        const offsets = [0, -68, 4, 42, 67, 0, 68]; // bg, typeLabel, valueText, unitLabel, combatPreview, overlay, statusText
         const cardObjs = [
             s.cardBgs[index],
             s.cardTypeLabels[index],
             s.cardValueTexts[index],
             s.cardUnitLabels[index],
+            s.combatPreviewTexts[index],
             s.cardOverlays[index],
             s.cardStatusTexts[index]
         ];
@@ -1269,12 +1284,13 @@
         s.selectedCardIndex = -1;
 
         const cy = CARD_Y[index];
-        const offsets = [0, -74, 4, 42, 0, 68];
+        const offsets = [0, -68, 4, 42, 67, 0, 68];
         const cardObjs = [
             s.cardBgs[index],
             s.cardTypeLabels[index],
             s.cardValueTexts[index],
             s.cardUnitLabels[index],
+            s.combatPreviewTexts[index],
             s.cardOverlays[index],
             s.cardStatusTexts[index]
         ];
@@ -1601,6 +1617,7 @@
                 fadeTargets.push(s.cardTypeLabels[i]);
                 fadeTargets.push(s.cardValueTexts[i]);
                 fadeTargets.push(s.cardUnitLabels[i]);
+                fadeTargets.push(s.combatPreviewTexts[i]);
                 fadeTargets.push(s.cardOverlays[i]);
                 fadeTargets.push(s.cardStatusTexts[i]);
             }
@@ -1633,9 +1650,10 @@
 
                         // Place card + text at old position, fully visible
                         s.cardBgs[i].setPosition(oldX, oldY).setAlpha(1).setScale(1).setVisible(true);
-                        s.cardTypeLabels[i].setPosition(oldX, oldY - 74).setAlpha(1).setVisible(true);
+                        s.cardTypeLabels[i].setPosition(oldX, oldY - 68).setAlpha(1).setVisible(true);
                         s.cardValueTexts[i].setPosition(oldX, oldY + 4).setAlpha(1).setVisible(true);
                         s.cardUnitLabels[i].setPosition(oldX, oldY + 42).setAlpha(1).setVisible(true);
+                        s.combatPreviewTexts[i].setPosition(oldX, oldY + 67).setAlpha(1).setVisible(true);
 
                         // Slide everything together to new position
                         s.tweens.add({
@@ -1662,12 +1680,19 @@
                             duration: 400, delay: 100,
                             ease: 'Cubic.easeInOut'
                         });
+                        s.tweens.add({
+                            targets: s.combatPreviewTexts[i],
+                            x: tx, y: ty + 67,
+                            duration: 400, delay: 100,
+                            ease: 'Cubic.easeInOut'
+                        });
                     } else {
                         // New card: fly in from center
                         s.cardBgs[i].setPosition(deckX, deckY).setAlpha(0).setScale(0.5).setVisible(true);
                         s.cardTypeLabels[i].setPosition(deckX, deckY - 68).setAlpha(0).setVisible(true);
                         s.cardValueTexts[i].setPosition(deckX, deckY + 4).setAlpha(0).setVisible(true);
                         s.cardUnitLabels[i].setPosition(deckX, deckY + 42).setAlpha(0).setVisible(true);
+                        s.combatPreviewTexts[i].setPosition(deckX, deckY + 67).setAlpha(0).setVisible(true);
 
                         s.tweens.add({
                             targets: s.cardBgs[i],
@@ -1679,7 +1704,7 @@
                             ease: 'Back.easeOut'
                         });
                         s.tweens.add({
-                            targets: [s.cardTypeLabels[i], s.cardValueTexts[i], s.cardUnitLabels[i]],
+                            targets: [s.cardTypeLabels[i], s.cardValueTexts[i], s.cardUnitLabels[i], s.combatPreviewTexts[i]],
                             alpha: 1,
                             duration: 200,
                             delay: i * 100 + 250
@@ -1689,6 +1714,7 @@
                         s.cardTypeLabels[i].setPosition(tx, ty - 68);
                         s.cardValueTexts[i].setPosition(tx, ty + 4);
                         s.cardUnitLabels[i].setPosition(tx, ty + 42);
+                        s.combatPreviewTexts[i].setPosition(tx, ty + 67);
                     }
                 }
 
@@ -1734,6 +1760,7 @@
             fadeTargets.push(s.cardTypeLabels[i]);
             fadeTargets.push(s.cardValueTexts[i]);
             fadeTargets.push(s.cardUnitLabels[i]);
+            fadeTargets.push(s.combatPreviewTexts[i]);
             fadeTargets.push(s.cardOverlays[i]);
             fadeTargets.push(s.cardStatusTexts[i]);
         }
@@ -1795,6 +1822,7 @@
                 s.cardTypeLabels[i].setAlpha(0).setPosition(tx, ty - 68);
                 s.cardValueTexts[i].setAlpha(0).setPosition(tx, ty + 4);
                 s.cardUnitLabels[i].setAlpha(0).setPosition(tx, ty + 42);
+                s.combatPreviewTexts[i].setAlpha(0).setPosition(tx, ty + 67);
 
                 // Pulse to full size
                 s.tweens.add({
@@ -1806,7 +1834,7 @@
                 });
                 // Text fades in with a warm "carried over" color flash
                 s.tweens.add({
-                    targets: [s.cardTypeLabels[i], s.cardValueTexts[i], s.cardUnitLabels[i]],
+                    targets: [s.cardTypeLabels[i], s.cardValueTexts[i], s.cardUnitLabels[i], s.combatPreviewTexts[i]],
                     alpha: 1,
                     duration: 300,
                     delay: i * 80 + 150
@@ -1817,6 +1845,7 @@
                 s.cardTypeLabels[i].setPosition(deckX, deckY - 68).setAlpha(0);
                 s.cardValueTexts[i].setPosition(deckX, deckY + 4).setAlpha(0);
                 s.cardUnitLabels[i].setPosition(deckX, deckY + 42).setAlpha(0);
+                s.combatPreviewTexts[i].setPosition(deckX, deckY + 67).setAlpha(0);
 
                 s.tweens.add({
                     targets: s.cardBgs[i],
@@ -1828,7 +1857,7 @@
                     ease: 'Back.easeOut'
                 });
                 s.tweens.add({
-                    targets: [s.cardTypeLabels[i], s.cardValueTexts[i], s.cardUnitLabels[i]],
+                    targets: [s.cardTypeLabels[i], s.cardValueTexts[i], s.cardUnitLabels[i], s.combatPreviewTexts[i]],
                     alpha: 1,
                     duration: 200,
                     delay: i * 100 + 250
@@ -1839,6 +1868,7 @@
             s.cardTypeLabels[i].setPosition(tx, ty - 68);
             s.cardValueTexts[i].setPosition(tx, ty + 4);
             s.cardUnitLabels[i].setPosition(tx, ty + 42);
+            s.combatPreviewTexts[i].setPosition(tx, ty + 67);
         }
     }
 
