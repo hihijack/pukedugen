@@ -558,7 +558,7 @@
             s.cardUnitLabels.push(unitLabel);
 
             // Combat preview text (below bottom line, monsters only)
-            const combatPreview = s.add.text(cx, cy + 67, '', {
+            const combatPreview = s.add.text(cx, cy + 79, '', {
                 fontSize: '12px',
                 fill: '#cccccc',
                 fontFamily: 'Microsoft YaHei, sans-serif',
@@ -1136,7 +1136,7 @@
         const card = gameState.roomCards[index];
 
         // Move card up (absolute targets)
-        const offsets = [0, -68, 4, 42, 67, 0, 68]; // bg, typeLabel, valueText, unitLabel, combatPreview, overlay, statusText
+        const offsets = [0, -68, 4, 42, 79, 0, 68]; // bg, typeLabel, valueText, unitLabel, combatPreview, overlay, statusText
         const cardObjs = [
             s.cardBgs[index],
             s.cardTypeLabels[index],
@@ -1653,7 +1653,11 @@
                         s.cardTypeLabels[i].setPosition(oldX, oldY - 68).setAlpha(1).setVisible(true);
                         s.cardValueTexts[i].setPosition(oldX, oldY + 4).setAlpha(1).setVisible(true);
                         s.cardUnitLabels[i].setPosition(oldX, oldY + 42).setAlpha(1).setVisible(true);
-                        s.combatPreviewTexts[i].setPosition(oldX, oldY + 67).setAlpha(1).setVisible(true);
+                        if (gameState.roomCards[i] && gameState.roomCards[i].type === 'monster') {
+                            s.combatPreviewTexts[i].setPosition(oldX, oldY + 79).setAlpha(1).setVisible(true);
+                        } else {
+                            s.combatPreviewTexts[i].setVisible(false);
+                        }
 
                         // Slide everything together to new position
                         s.tweens.add({
@@ -1682,7 +1686,7 @@
                         });
                         s.tweens.add({
                             targets: s.combatPreviewTexts[i],
-                            x: tx, y: ty + 67,
+                            x: tx, y: ty + 79,
                             duration: 400, delay: 100,
                             ease: 'Cubic.easeInOut'
                         });
@@ -1692,7 +1696,11 @@
                         s.cardTypeLabels[i].setPosition(deckX, deckY - 68).setAlpha(0).setVisible(true);
                         s.cardValueTexts[i].setPosition(deckX, deckY + 4).setAlpha(0).setVisible(true);
                         s.cardUnitLabels[i].setPosition(deckX, deckY + 42).setAlpha(0).setVisible(true);
-                        s.combatPreviewTexts[i].setPosition(deckX, deckY + 67).setAlpha(0).setVisible(true);
+                        if (gameState.roomCards[i] && gameState.roomCards[i].type === 'monster') {
+                            s.combatPreviewTexts[i].setPosition(deckX, deckY + 79).setAlpha(0).setVisible(true);
+                        } else {
+                            s.combatPreviewTexts[i].setVisible(false);
+                        }
 
                         s.tweens.add({
                             targets: s.cardBgs[i],
@@ -1714,7 +1722,9 @@
                         s.cardTypeLabels[i].setPosition(tx, ty - 68);
                         s.cardValueTexts[i].setPosition(tx, ty + 4);
                         s.cardUnitLabels[i].setPosition(tx, ty + 42);
-                        s.combatPreviewTexts[i].setPosition(tx, ty + 67);
+                        if (gameState.roomCards[i] && gameState.roomCards[i].type === 'monster') {
+                            s.combatPreviewTexts[i].setPosition(tx, ty + 79);
+                        }
                     }
                 }
 
@@ -1822,7 +1832,11 @@
                 s.cardTypeLabels[i].setAlpha(0).setPosition(tx, ty - 68);
                 s.cardValueTexts[i].setAlpha(0).setPosition(tx, ty + 4);
                 s.cardUnitLabels[i].setAlpha(0).setPosition(tx, ty + 42);
-                s.combatPreviewTexts[i].setAlpha(0).setPosition(tx, ty + 67);
+                if (gameState.roomCards[i] && gameState.roomCards[i].type === 'monster') {
+                    s.combatPreviewTexts[i].setAlpha(0).setPosition(tx, ty + 79).setVisible(true);
+                } else {
+                    s.combatPreviewTexts[i].setVisible(false);
+                }
 
                 // Pulse to full size
                 s.tweens.add({
@@ -1845,7 +1859,11 @@
                 s.cardTypeLabels[i].setPosition(deckX, deckY - 68).setAlpha(0);
                 s.cardValueTexts[i].setPosition(deckX, deckY + 4).setAlpha(0);
                 s.cardUnitLabels[i].setPosition(deckX, deckY + 42).setAlpha(0);
-                s.combatPreviewTexts[i].setPosition(deckX, deckY + 67).setAlpha(0);
+                if (gameState.roomCards[i] && gameState.roomCards[i].type === 'monster') {
+                    s.combatPreviewTexts[i].setPosition(deckX, deckY + 79).setAlpha(0).setVisible(true);
+                } else {
+                    s.combatPreviewTexts[i].setVisible(false);
+                }
 
                 s.tweens.add({
                     targets: s.cardBgs[i],
@@ -1868,7 +1886,9 @@
             s.cardTypeLabels[i].setPosition(tx, ty - 68);
             s.cardValueTexts[i].setPosition(tx, ty + 4);
             s.cardUnitLabels[i].setPosition(tx, ty + 42);
-            s.combatPreviewTexts[i].setPosition(tx, ty + 67);
+            if (gameState.roomCards[i] && gameState.roomCards[i].type === 'monster') {
+                s.combatPreviewTexts[i].setPosition(tx, ty + 79);
+            }
         }
     }
 
