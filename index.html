@@ -809,16 +809,17 @@
             const cpText = s.combatPreviewTexts[i];
             if (card.type === 'monster' && !processed) {
                 const hasWeapon = gameState.weapon && gameState.useWeapon;
+                const isDark = s.theme === 'dark';
                 cpText.setVisible(true);
                 if (hasWeapon && gameState.weapon.level >= card.hp) {
                     if (gameState.weapon.atk >= card.hp) {
-                        cpText.setText('🗡️').setFill('#ffaa33');  // instant kill
+                        cpText.setText('🗡️').setFill(isDark ? '#ffaa33' : '#cc6600');  // instant kill
                     } else {
                         const dmg = card.hp - gameState.weapon.atk;
-                        cpText.setText('🗡️HP-' + dmg).setFill('#ffcc44');  // weapon effective
+                        cpText.setText('🗡️HP-' + dmg).setFill(isDark ? '#ffcc44' : '#997700');  // weapon effective
                     }
                 } else {
-                    cpText.setText('HP-' + card.hp).setFill('#ff6666');  // no weapon / ineffective
+                    cpText.setText('HP-' + card.hp).setFill(isDark ? '#ff6666' : '#cc3333');  // no weapon / ineffective
                 }
             } else {
                 cpText.setVisible(false);
